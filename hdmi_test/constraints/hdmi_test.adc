@@ -1,0 +1,19 @@
+#=============================================================================
+# hdmi_test.adc  —  HDMI bring-up 工程引脚约束
+#-----------------------------------------------------------------------------
+# 顶层：hdmi_test_top
+# 来源：官方例程 hdmi.adc（权威）
+#=============================================================================
+
+# ---- 时钟 / 复位 ----
+set_pin_assignment	{ clk_50m }	{ LOCATION = R7; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ rst_n_in }	{ LOCATION = A9; IOSTANDARD = LVCMOS33; }
+
+# ---- LED 状态 ----
+set_pin_assignment	{ led }	{ LOCATION = B14; IOSTANDARD = LVCMOS33; }
+
+# ---- HDMI（软 TMDS，LVDS33；_N 为相邻引脚，自动跟随）----
+set_pin_assignment	{ hdmi_clk_p }	{ LOCATION = P1; IOSTANDARD = LVDS33; }
+set_pin_assignment	{ hdmi_d0_p }	{ LOCATION = N1; IOSTANDARD = LVDS33; }
+set_pin_assignment	{ hdmi_d1_p }	{ LOCATION = P4; IOSTANDARD = LVDS33; }
+set_pin_assignment	{ hdmi_d2_p }	{ LOCATION = J3; IOSTANDARD = LVDS33; }

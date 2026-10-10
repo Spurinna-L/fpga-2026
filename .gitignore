@@ -1,2 +1,28 @@
 # 忽略EG4S20开发板下的所有文件
 EG4S20开发板/
+log/
+
+# Anlogic TD 综合、布局布线及下载生成物
+**/*_Runs/
+*.logw
+*.area
+*.rpt
+*.bit
+*.al.back
+*.lock.f
+**/.recent_user_depot.ini
+
+# 仿真输出
+*.vcd
+*.fst
+*.wlf
+*.ghw
+transcript
+work/
+
+# 临时文件和编辑器备份
+*.tmp
+*.bak
+*.swp
+*~
+
