@@ -3,3 +3,29 @@ EG4S20开发板/
 # 忽略日志和临时文件
 project/log/
 project/main_project_Runs/
+log/
+
+# Anlogic TD 综合、布局布线及下载生成物
+**/*_Runs/
+*.logw
+*.area
+*.rpt
+*.bit
+*.al.back
+*.lock.f
+**/.recent_user_depot.ini
+
+# 仿真输出
+*.vcd
+*.fst
+*.wlf
+*.ghw
+transcript
+work/
+
+# 临时文件和编辑器备份
+*.tmp
+*.bak
+*.swp
+*~
+

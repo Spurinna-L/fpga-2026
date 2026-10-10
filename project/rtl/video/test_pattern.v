@@ -10,11 +10,11 @@
 `timescale 1ns / 1ps
 
 module test_pattern (
-    input  wire        clk_pix,
-    input  wire        rst_n,
-    input  wire        de,
-    input  wire [10:0] x,
-    input  wire [10:0] y,
+    input  wire        clk_pix, // 像素时钟
+    input  wire        rst_n,   // 复位信号，低有效
+    input  wire        de,      // 数据使能
+    input  wire [10:0] x,       // 当前像素的 X 坐标
+    input  wire [10:0] y,       // 当前像素的 Y 坐标
     output reg  [15:0] rgb      // RGB565
 );
 
