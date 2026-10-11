@@ -64,6 +64,7 @@ project/
 | `fat32_reader` / `media_scan` | 🟡 骨架 | 第 2 周主工作量 |
 | `bmp_decoder` / `wav_player` | 🟡 骨架 | 第 2 周 |
 | `pwm_audio` | ✅ 实现 | 数字音量 + 一阶 Σ-Δ |
+| `r2r_dac_audio` | ✅ 实现 | SDRAM 音频环缓 → 数字音量 → 8bit R-2R DAC（走 RD2 端口） |
 | `audio_viz` | 🟡 骨架 | 第 4 周 |
 | `mic_adc` | ✅ 实现 | 复用 spi_rx |
 | `main_fsm` / `regs` / `seg_led` | ✅ 实现 | 基本流程可用 |
@@ -370,6 +371,29 @@ project/
   );
   ```
 - **通用性**：★高。Σ-Δ 调制与参数无关，任何"数字→模拟"PWM 输出可复用；改阶数/位宽即可。
+
+#### `audio/r2r_dac_audio.v` 【自研】
+- **功能**：**基础音频输出（R-2R DAC 通路）**。从 SDRAM「音频环形缓冲」（`0x1C2000`，131072 个 16bit 单元）里按 48kHz 逐个取出 PCM 采样（走 `sdram_ctrl_wrap` 的 **RD2** 端口，RD1 已给视频扫描占用），做数字音量后压成 8bit 无符号码输出到板载 R-2R 电阻网络 DAC。
+- **原理要点**（详见文件内中文注释）：
+  1. **开机装载**：复位后给 RD2 一次 `rd_load` 脉冲，把环形缓冲首地址 `AUDIO_BASE=0x1C2000` 装入控制器并清空该端口 FIFO；`rd_max_addr = AUDIO_BASE + AUDIO_WORDS + BURST_LEN`。
+  2. **48kHz 节拍**：50MHz 下 50M/48k=1041.67 非整数，用「余数累加器」精确分频（每拍 `acc += 48000`，`acc >= 50000000` 时出一次节拍并 `acc -= 50000000`），只有 ±1 clk 抖动。
+  3. **取数**：每到采样节拍且 FIFO 非空，给 `rd_req` 一拍脉冲，同时按 **show-ahead** 语义在当拍采样 `rd_data`（RD 端口 FIFO 提前显示最老数据）。FIFO 空则保持输出（静音续持）并置 `underrun` 调试标志。
+  4. **三级流水**：采样捕获 → 有符号音量 `pcm*volume>>8` → `dac_out = 高 8bit ^ 0x80`（把有符号平移到单极性，128=中点/静音）。
+- **接口**：
+  ```verilog
+  module r2r_dac_audio #(
+      parameter integer CLK_HZ = 50_000_000, parameter integer SAMPLE_HZ = 48_000,
+      parameter [20:0] AUDIO_BASE = 21'h1C2000, parameter [20:0] AUDIO_WORDS = 21'h20000,
+      parameter [8:0] BURST_LEN = 9'd256) (
+      input  wire clk, rst_n,
+      output wire sdram_rd_clk, output reg sdram_rd_load,
+      output wire [20:0] sdram_rd_addr, sdram_rd_max_addr, output wire [9:0] sdram_rd_length,
+      output reg  sdram_rd_req, input wire [15:0] sdram_rd_data, input wire sdram_rd_empty,
+      input  wire [7:0] volume, output reg [7:0] dac_out
+  );
+  ```
+- **引脚**：`dac_out[7:0]` 与 8 个 LED 复用同组 IO（`B14,B15,B16,C15,C16,E13,E16,F16`）。本设计这组引脚用于 R-2R DAC，故顶层端口由 `led` 改为 `dac_out`（约束见 `constraints/top.adc`）。
+- **通用性**：★高。环形缓冲 + 精确采样节拍 + 单极性码转换三者解耦，改 `AUDIO_BASE/WORDS/SAMPLE_HZ` 即可移植到任意 SDRAM 音频播放工程。
 
 #### `audio/audio_viz.v` 【自研（骨架）】
 - **功能**：音频可视化（扩展要求⑤）。分频段能量/Goertzel（8~16 段）优先、FFT 冲刺；声源可选播放 PCM 或麦克风现场采集。

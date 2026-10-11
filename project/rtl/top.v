@@ -2,7 +2,7 @@
 // top.v  —  系统顶层（智能商业展陈 HDMI 多媒体播放系统）
 //-----------------------------------------------------------------------------
 // 数据流（详见 项目计划.md §4.1）：
-//   SD → sd_ctrl → fat32_reader/media_scan → bmp_decoder/wav_player
+//   SD → sd_ctrl → fat32_reader/media_scan → bmp_decoder/wav_to_pcm
 //     → SDRAM 帧缓存(fb_mgr/sdram_ctrl_wrap) → 缩放 → 参数处理 → OSD 合成
 //     → 转场 → HDMI 软 TMDS 输出；音频 → PWM(F3) → 功放。
 //   控制：矩阵键盘 → 消抖 → main_fsm/regs → 各模块 + 数码管/LED。
@@ -48,8 +48,10 @@ module top (
     output wire [3:0]  kb_row,         // D9,F9,C10,E10
     input  wire [3:0]  kb_col,         // E11,D11,C11,F10
 
-    // LED 状态
-    output wire [7:0]  led             // B14,B15,B16,C15,C16,E13,E16,F16
+    // 8 位 R-2R DAC 音频输出
+    //   注意：这 8 个引脚在硬件上与 8 个 LED 复用同一组 IO（B14..F16）。
+    //   本设计把它们用于音频 DAC 输出；若想改回「LED 状态灯」，见文件末尾注释。
+    output wire [7:0]  dac_out         // B14,B15,B16,C15,C16,E13,E16,F16
 );
 
     //-------------------------------------------------------------------------
@@ -227,7 +229,9 @@ module top (
         .rgb_o         (fb_rgb)
     );
 
-    // 片内 SDRAM 控制器（4 端口）；当前仅占用 RD1 供扫描读
+    // 片内 SDRAM 控制器（4 端口）：
+    //   仅 RD1 供视频帧缓冲扫描；音频改走片内 BRAM，不再使用 SDRAM 的 RD2，
+    //   故 RD2/WR1/WR2 均按空端口短接。
     sdram_ctrl_wrap u_sdram_ctrl (
         .clk_50m     (clk_50m),
         .rst_n       (rst_n),
@@ -238,8 +242,9 @@ module top (
         .rd1_data    (fb_rd_data), .rd1_req(fb_rd_req), .rd1_addr(fb_rd_addr),
         .rd1_max_addr(21'h0E1000), .rd1_length(10'd256), .rd1_load(1'b0),
         .rd1_clk     (clk_pix), .rd1_empty(), .rd1_use(),
-        .rd2_data    (), .rd2_req(1'b0), .rd2_addr(21'd0), .rd2_max_addr(21'd0),
-        .rd2_length  (10'd0), .rd2_load(1'b0), .rd2_clk(clk_pix), .rd2_empty(), .rd2_use(),
+        .rd2_data    (16'd0), .rd2_req(), .rd2_addr(),
+        .rd2_max_addr(21'd0), .rd2_length(10'd0), .rd2_load(1'b0),
+        .rd2_clk     (clk_50m), .rd2_empty(), .rd2_use(),
         .clk_sdr_ctrl(), .clk_sdram(), .pll_locked()
     );
 
@@ -439,27 +444,12 @@ module top (
         .px_we     (bmp_px_we)
     );
 
-    wire [15:0] pcm_l, pcm_r;
-    wire        pcm_valid;
-    wire [31:0] wav_rate;
-    wire [2:0]  wav_channels;
-    wire [5:0]  wav_bits;
-
-    wav_player u_wav_player (
-        .clk        (clk_50m),
-        .rst_n      (rst_n),
-        .file_pop   (),
-        .file_valid (1'b0),
-        .file_data  (8'd0),
-        .sample_rate(wav_rate),
-        .channels   (wav_channels),
-        .bits       (wav_bits),
-        .header_ok  (),
-        .pcm_l      (pcm_l),
-        .pcm_r      (pcm_r),
-        .pcm_valid  (pcm_valid),
-        .eof        ()
-    );
+    // WAV 文件的解码改由 wav_to_pcm（见下方音频 BRAM 链路）完成；
+    // 此处 pwm_audio / audio_viz 仍需一份 PCM 流，先接静音占位。
+    // TODO: 若希望 PWM 通路也出声，可把 BRAM 读出的采样同步过来。
+    wire [15:0] pcm_l     = 16'd0;
+    wire [15:0] pcm_r     = 16'd0;
+    wire        pcm_valid = 1'b0;
 
     //-------------------------------------------------------------------------
     // 音频：数字音量 + Σ-Δ PWM 输出
@@ -471,6 +461,30 @@ module top (
         .pcm_valid(pcm_valid),
         .volume   (reg_audio_volume),
         .audio_pwm(audio_pwm)
+    );
+
+    //-------------------------------------------------------------------------
+    // 音频输出（R-2R DAC 通路，BRAM 版）：
+    //   WAV 字节流 → wav_to_pcm 解出 16bit PCM → 写入片内 BRAM
+    //             → 按 48kHz 读出 → 数字音量 → 8bit DAC → 板载 R-2R 网络
+    //   输出引脚 dac_out[7:0] 与 8 个 LED 复用（B14..F16）。
+    //   上游 SD/FAT 字节流尚未接入，先短接（s_valid=0）；接好后把
+    //   fat32_reader 的 file_valid/file_data/file_pop 接到 s_valid/s_data/s_ready。
+    //-------------------------------------------------------------------------
+    wav_r2r_top u_wav_r2r_top (
+        .clk         (clk_50m),
+        .rst_n       (rst_n),
+        .s_valid     (1'b0),                   // TODO: 接 fat32_reader 的 file_valid
+        .s_data      (8'd0),                   // TODO: 接 fat32_reader 的 file_data
+        .s_ready     (),                       // TODO: 接 fat32_reader 的 file_pop
+        .volume      (reg_audio_volume),
+        .dac_out     (dac_out),
+        .header_ok   (),
+        .load_done   (),
+        .sample_count(),
+        .sample_rate (),
+        .channels    (),
+        .bits        ()
     );
 
     // 音频可视化（频谱柱；第 4 周实现）
@@ -513,22 +527,25 @@ module top (
         .seg_led(seg_led)
     );
 
-    assign led[0] = pll_locked;
-    assign led[1] = rst_n;
-    assign led[2] = sd_init_done;
-    assign led[3] = frame_start;
-    assign led[4] = transition_active;
-    assign led[5] = 1'b0;
-    assign led[6] = 1'b0;
-    assign led[7] = 1'b0;
+    // 说明：这 8 个引脚已改作 R-2R DAC 音频输出（dac_out），不再驱动 LED 状态灯。
+    //       如日后想恢复 LED 状态灯（此时音频 DAC 就不可用，二者共用同一组引脚），
+    //       可把下面几行取消注释，并把端口 dac_out 改回 led：
+    // assign led[0] = pll_locked;
+    // assign led[1] = rst_n;
+    // assign led[2] = sd_init_done;
+    // assign led[3] = frame_start;
+    // assign led[4] = transition_active;
+    // assign led[5] = 1'b0;
+    // assign led[6] = 1'b0;
+    // assign led[7] = 1'b0;
 
     // synthesis translate_off
     wire _unused = &{1'b0, line_start, reg_transition_type, reg_display_mode,
                      reg_media_index, reg_auto_play, swap_done,
                      file_data, file_valid, file_eof, file_pop,
                      bmp_px_data, bmp_px_x, bmp_px_y, bmp_px_we,
-                     pcm_r, wav_rate, wav_channels, wav_bits, viz_bars, viz_valid,
-                     mic_sample, mic_valid, img_ready};
+                     pcm_r, viz_bars, viz_valid,
+                     mic_sample, mic_valid, img_ready, pll_locked, transition_active};
     // synthesis translate_on
 
 endmodule

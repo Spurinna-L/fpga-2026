@@ -1,0 +1,23 @@
+#=============================================================================
+# audio_selftest.adc  —  音频自测工程引脚约束（对称顶层 audio_selftest_top）
+#-----------------------------------------------------------------------------
+# 本工程用到 11 个引脚，与正式工程 project/constraints/top.adc 中
+# 同名的 clk_50m / rst_n_in / audio_pwm / dac_out[*] 完全一致（同一块板子）。
+#=============================================================================
+
+# ---- 时钟 / 复位 ----
+set_pin_assignment	{ clk_50m }	{ LOCATION = R7; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ rst_n_in }	{ LOCATION = A9; IOSTANDARD = LVCMOS33; }
+
+# ---- 音频输出 ①：PWM → 板载低通 + FM8002A 功放 → 3.5mm/喇叭（推荐用这路）----
+set_pin_assignment	{ audio_pwm }	{ LOCATION = F3; IOSTANDARD = LVCMOS33; }
+
+# ---- 音频输出 ②：8bit R-2R DAC（与 8 个 LED 复用同一组 IO，需自备 R-2R 电阻网络）----
+set_pin_assignment	{ dac_out[0] }	{ LOCATION = B14; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[1] }	{ LOCATION = B15; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[2] }	{ LOCATION = B16; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[3] }	{ LOCATION = C15; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[4] }	{ LOCATION = C16; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[5] }	{ LOCATION = E13; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[6] }	{ LOCATION = E16; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[7] }	{ LOCATION = F16; IOSTANDARD = LVCMOS33; }
