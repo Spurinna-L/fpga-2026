@@ -22,6 +22,8 @@ log/
 *.ghw
 transcript
 work/
+hdmi_test/sim/*.out
+hdmi_test/sim/*.bmp
 
 # 临时文件和编辑器备份
 *.tmp

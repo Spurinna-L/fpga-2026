@@ -24,7 +24,7 @@ module test_pattern (
 
     always @(*) begin
         case (bar_idx)
-            3'd0: bar_rgb = 16'hFFFF; // 白
+            3'd0: bar_rgb = 16'h0000; // 黑
             3'd1: bar_rgb = 16'hFFE0; // 黄
             3'd2: bar_rgb = 16'h07FF; // 青
             3'd3: bar_rgb = 16'h07E0; // 绿

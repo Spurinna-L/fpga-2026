@@ -1,16 +1,26 @@
 #=============================================================================
-# hdmi_test.adc  —  HDMI bring-up 工程引脚约束
+# hdmi_test.adc  —  SDRAM 帧缓冲上板工程引脚约束
 #-----------------------------------------------------------------------------
 # 顶层：hdmi_test_top
-# 来源：官方例程 hdmi.adc（权威）
+# 说明：SDRAM 为**片内硬核**（EG_PHY_SDRAM_2M_32），不占任何外部引脚。
+#       所以本约束只含：时钟/复位、8 位 LED、HDMI 4 对差分。
 #=============================================================================
 
 # ---- 时钟 / 复位 ----
 set_pin_assignment	{ clk_50m }	{ LOCATION = R7; IOSTANDARD = LVCMOS33; }
 set_pin_assignment	{ rst_n_in }	{ LOCATION = A9; IOSTANDARD = LVCMOS33; }
 
-# ---- LED 状态 ----
-set_pin_assignment	{ led }	{ LOCATION = B14; IOSTANDARD = LVCMOS33; }
+# ---- 8 位 LED 状态 ----
+#   led[0]=HDMI PLL锁定  led[1]=SDRAM PLL锁定  led[2]=帧缓冲就绪  led[3]=前台(A/B)
+#   led[4]=帧结束脉冲    led[5]=上游反压        led[6]=读欠载      led[7]=双PLL锁定
+set_pin_assignment	{ led[0] }	{ LOCATION = B14; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ led[1] }	{ LOCATION = B15; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ led[2] }	{ LOCATION = B16; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ led[3] }	{ LOCATION = C15; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ led[4] }	{ LOCATION = C16; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ led[5] }	{ LOCATION = E13; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ led[6] }	{ LOCATION = E16; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ led[7] }	{ LOCATION = F16; IOSTANDARD = LVCMOS33; }
 
 # ---- HDMI（软 TMDS，LVDS33；_N 为相邻引脚，自动跟随）----
 set_pin_assignment	{ hdmi_clk_p }	{ LOCATION = P1; IOSTANDARD = LVDS33; }

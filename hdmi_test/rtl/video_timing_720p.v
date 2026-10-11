@@ -53,7 +53,7 @@ module video_timing_720p (
     always @(posedge clk_pix or negedge rst_n) begin
         if (!rst_n) begin
             h_cnt <= 11'd0;
-            v_cnt <= 11'd0;
+            v_cnt <= V_ACTIVE;   // 从垂直消隐起步：给帧缓冲读预取留出时间，避免开机欠载
         end else if (h_cnt == H_TOTAL-1) begin
             h_cnt <= 11'd0;
             if (v_cnt == V_TOTAL-1)
