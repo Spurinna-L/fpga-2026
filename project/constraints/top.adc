@@ -43,8 +43,19 @@ set_pin_assignment	{ sd_cs }	{ LOCATION = F13; IOSTANDARD = LVCMOS33; }
 set_pin_assignment	{ sd_mosi }	{ LOCATION = F14; IOSTANDARD = LVCMOS33; }
 set_pin_assignment	{ sd_miso }	{ LOCATION = D14; IOSTANDARD = LVCMOS33; }
 
-# ---- 音频输出（PWM → 功放）----
+# ---- 音频输出 ①：PWM（F3 → 低通 + 功放）----
 set_pin_assignment	{ audio_pwm }	{ LOCATION = F3; IOSTANDARD = LVCMOS33; }
+
+# ---- 音频输出 ②：8 位 R-2R DAC（与 8 个 LED 复用同组引脚）----
+#   由 rtl/audio/r2r_dac_audio.v 驱动；输出 8bit 无符号码，经板载 R-2R 网络变模拟电压。
+set_pin_assignment	{ dac_out[0] }	{ LOCATION = B14; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[1] }	{ LOCATION = B15; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[2] }	{ LOCATION = B16; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[3] }	{ LOCATION = C15; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[4] }	{ LOCATION = C16; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[5] }	{ LOCATION = E13; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[6] }	{ LOCATION = E16; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ dac_out[7] }	{ LOCATION = F16; IOSTANDARD = LVCMOS33; }
 
 # ---- 麦克风 SPI ADC ----
 set_pin_assignment	{ mic_cs }	{ LOCATION = J6; IOSTANDARD = LVCMOS33; }
@@ -76,15 +87,16 @@ set_pin_assignment	{ kb_col[1] }	{ LOCATION = D11; IOSTANDARD = LVCMOS33; }
 set_pin_assignment	{ kb_col[2] }	{ LOCATION = C11; IOSTANDARD = LVCMOS33; }
 set_pin_assignment	{ kb_col[3] }	{ LOCATION = F10; IOSTANDARD = LVCMOS33; }
 
-# ---- 8 位 LED（与 R-2R DAC 复用）----
-set_pin_assignment	{ led[0] }	{ LOCATION = B14; IOSTANDARD = LVCMOS33; }
-set_pin_assignment	{ led[1] }	{ LOCATION = B15; IOSTANDARD = LVCMOS33; }
-set_pin_assignment	{ led[2] }	{ LOCATION = B16; IOSTANDARD = LVCMOS33; }
-set_pin_assignment	{ led[3] }	{ LOCATION = C15; IOSTANDARD = LVCMOS33; }
-set_pin_assignment	{ led[4] }	{ LOCATION = C16; IOSTANDARD = LVCMOS33; }
-set_pin_assignment	{ led[5] }	{ LOCATION = E13; IOSTANDARD = LVCMOS33; }
-set_pin_assignment	{ led[6] }	{ LOCATION = E16; IOSTANDARD = LVCMOS33; }
-set_pin_assignment	{ led[7] }	{ LOCATION = F16; IOSTANDARD = LVCMOS33; }
+# ---- 8 位 LED（与 R-2R DAC 复用同组引脚；本设计这组引脚已改为 R-2R DAC 输出，
+#      见上面 "音频输出 ②" 的 dac_out[*] 约束，故此处不再重复约束 led[*]）----
+# set_pin_assignment	{ led[0] }	{ LOCATION = B14; IOSTANDARD = LVCMOS33; }
+# set_pin_assignment	{ led[1] }	{ LOCATION = B15; IOSTANDARD = LVCMOS33; }
+# set_pin_assignment	{ led[2] }	{ LOCATION = B16; IOSTANDARD = LVCMOS33; }
+# set_pin_assignment	{ led[3] }	{ LOCATION = C15; IOSTANDARD = LVCMOS33; }
+# set_pin_assignment	{ led[4] }	{ LOCATION = C16; IOSTANDARD = LVCMOS33; }
+# set_pin_assignment	{ led[5] }	{ LOCATION = E13; IOSTANDARD = LVCMOS33; }
+# set_pin_assignment	{ led[6] }	{ LOCATION = E16; IOSTANDARD = LVCMOS33; }
+# set_pin_assignment	{ led[7] }	{ LOCATION = F16; IOSTANDARD = LVCMOS33; }
 
 # ---- 预留：8 拨码开关 SW1..SW7 / 无源蜂鸣器（引脚待核对待用原理图）----
 # set_pin_assignment	{ sw[1] }	{ LOCATION = A10; IOSTANDARD = LVCMOS33; PULLTYPE = PULLDOWN; }
