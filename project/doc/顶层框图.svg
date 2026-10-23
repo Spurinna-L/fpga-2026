@@ -35,291 +35,254 @@
 
   <rect x="0" y="0" width="1800" height="1320" fill="#ffffff"/>
 
-  <text class="title" x="900" y="40">纯 RTL 零处理器 HDMI 多媒体展陈终端 · 顶层框图 v3.1</text>
-  <text class="sub" x="900" y="66">EG4S20BG256 · 640×480@60 · HDMI 1.4b（视频+音频）· A/B 交叉溶解 · 中文字幕 · TF WAV</text>
+  <text class="title" x="900" y="40">纯 RTL 零处理器 HDMI 多媒体展陈终端 · 顶层框图 v3.3</text>
+  <text class="sub" x="900" y="66">EG4S20BG256 · 640×480@60 RGB888 · 一写双读 frame_read_write · A/B溶解与滑动 · 中文64字+安路Logo+时间戳 · 多谐波合成+声波/频谱</text>
 
   <!-- ================= ① 时钟与复位 ================= -->
   <rect class="band" x="50" y="88" width="1700" height="134" rx="12"/>
-  <text class="h" x="70" y="112">① 时钟与复位（全系统唯一时钟源）</text>
+  <text class="h" x="70" y="112">① 时钟与复位（板载 R7 50MHz + 3 PLL + POR 同步复位）</text>
 
   <rect class="ext" x="70" y="135" width="110" height="46" rx="8"/>
-  <text class="tt" x="125" y="157">clk_50m</text>
+  <text class="tt" x="125" y="157">clk (R7)</text>
   <text class="ts" x="125" y="174">50 MHz</text>
 
-  <rect class="ip" x="220" y="130" width="150" height="52" rx="8"/>
-  <text class="tt" x="295" y="151">sys_pll</text>
-  <text class="ts" x="295" y="169">100M / 125M / 180°</text>
+  <rect class="ip" x="220" y="130" width="160" height="52" rx="8"/>
+  <text class="tt" x="300" y="151">u_sys_pll</text>
+  <text class="ts" x="300" y="169">100M / 125M / 125M_180</text>
 
-  <rect class="ip" x="400" y="130" width="150" height="52" rx="8"/>
-  <text class="tt" x="475" y="151">video_pll</text>
-  <text class="ts" x="475" y="169">25M / 125M</text>
+  <rect class="ip" x="410" y="130" width="150" height="52" rx="8"/>
+  <text class="tt" x="485" y="151">u_video_pll</text>
+  <text class="ts" x="485" y="169">25M / 125M</text>
 
-  <rect class="ip" x="580" y="130" width="190" height="52" rx="8"/>
-  <text class="tt" x="675" y="151">PLL_HDMI_AUDIO</text>
-  <text class="ts" x="675" y="169">12.288M</text>
+  <rect class="ip" x="590" y="130" width="190" height="52" rx="8"/>
+  <text class="tt" x="685" y="151">u_audio_pll</text>
+  <text class="ts" x="685" y="169">12.288M (48k×256)</text>
 
   <rect class="ext" x="70" y="192" width="110" height="28" rx="6"/>
-  <text class="tt" x="125" y="211">rst_n</text>
+  <text class="tt" x="125" y="211">rst_n (A9)</text>
 
-  <rect class="self" x="220" y="192" width="550" height="28" rx="6"/>
-  <text class="tt" x="495" y="211">por_gen：等 3 个 PLL lock + 计数 → 各域 rst_n</text>
+  <rect class="self" x="220" y="192" width="560" height="28" rx="6"/>
+  <text class="tt" x="500" y="211">POR 计数 + 各时钟域 reset_sync（M4 统一同步释放）</text>
 
-  <path class="link" d="M180,158 L195,158 L195,118 L675,118"/>
-  <path class="link" d="M295,118 L295,130" marker-end="url(#a)"/>
-  <path class="link" d="M475,118 L475,130" marker-end="url(#a)"/>
-  <path class="link" d="M675,118 L675,130" marker-end="url(#a)"/>
+  <path class="link" d="M180,158 L195,158 L195,118 L685,118"/>
+  <path class="link" d="M300,118 L300,130" marker-end="url(#a)"/>
+  <path class="link" d="M485,118 L485,130" marker-end="url(#a)"/>
+  <path class="link" d="M685,118 L685,130" marker-end="url(#a)"/>
   <path class="link" d="M180,206 L220,206" marker-end="url(#a)"/>
-  <path class="ctrl" d="M490,182 L490,192" marker-end="url(#ac)"/>
-  <text class="sm" x="478" y="188" text-anchor="end">lock</text>
-  <path class="ctrl" d="M490,220 L490,248" marker-end="url(#ac)"/>
-  <text class="sm" x="500" y="240">rst_n_*</text>
+  <path class="ctrl" d="M500,182 L500,192" marker-end="url(#ac)"/>
+  <text class="sm" x="488" y="188" text-anchor="end">lock</text>
+  <path class="ctrl" d="M500,220 L500,248" marker-end="url(#ac)"/>
+  <text class="sm" x="510" y="240">rst_*</text>
 
-  <!-- ================= ② 存储 / 解码 / 帧缓存 ================= -->
+  <!-- ================= ② 存储与一写双读帧缓存 ================= -->
   <rect class="band" x="50" y="250" width="1700" height="320" rx="12"/>
-  <text class="h" x="70" y="276">② 存储 / 解码 / 帧缓存（SD 分时复用 · 4 端口双读）</text>
+  <text class="h" x="70" y="276">② 存储与一写双读帧缓存（复用扩展 frame_read_write + sdr_as_ram，保留 WRITE_V_FLIP=1）</text>
 
-  <rect class="ext" x="70" y="300" width="100" height="60" rx="8"/>
-  <text class="tt" x="120" y="325">TF 卡</text>
-  <text class="ts" x="120" y="344">FAT32</text>
+  <rect class="ext" x="70" y="300" width="110" height="60" rx="8"/>
+  <text class="tt" x="125" y="325">TF 卡</text>
+  <text class="ts" x="125" y="344">FAT32 BMP</text>
 
-  <rect class="off" x="200" y="300" width="140" height="60" rx="8"/>
-  <text class="tt" x="270" y="325">sd_card_top</text>
-  <text class="ts" x="270" y="344">SPI 扇区读</text>
+  <rect class="off" x="220" y="300" width="150" height="60" rx="8"/>
+  <text class="tt" x="295" y="325">sd_card_top</text>
+  <text class="ts" x="295" y="344">SPI 扇区读</text>
 
-  <rect class="self" x="370" y="300" width="130" height="60" rx="8"/>
-  <text class="tt" x="435" y="325">sd_arbiter</text>
-  <text class="ts" x="435" y="344">分时复用</text>
+  <rect class="off" x="410" y="300" width="310" height="60" rx="8"/>
+  <text class="tt" x="565" y="325">sd_card_bmp + bmp_read</text>
+  <text class="ts" x="565" y="344">扫 4 图 · 轮播 · 640×480 24bit 像素流</text>
 
-  <rect class="self" x="530" y="300" width="160" height="60" rx="8"/>
-  <text class="tt" x="610" y="325">wav_read</text>
-  <text class="ts" x="610" y="344">FAT32 → WAV 扇区</text>
+  <rect class="self" x="410" y="395" width="440" height="100" rx="8"/>
+  <text class="tt" x="630" y="420">frame_read_write_dual（一写双读增强版）</text>
+  <text class="ts" x="630" y="442">写侧：wfifo_32_32_512 + frame_fifo_write (WRITE_V_FLIP=1)</text>
+  <text class="ts" x="630" y="462">读侧 A：rfifo_a + frame_fifo_read_a (BUF0_ADDR=0)</text>
+  <text class="ts" x="630" y="482">读侧 B：rfifo_b + frame_fifo_read_b (BUF1_ADDR=307200)</text>
 
-  <rect class="off" x="180" y="400" width="340" height="80" rx="8"/>
-  <text class="tt" x="350" y="428">sd_card_bmp（含 bmp_read）</text>
-  <text class="ts" x="350" y="450">扫描 4 图 · 双缓冲 · 轮播 · key1/key2</text>
-  <text class="ts" x="350" y="468">640×480 · 24bit RGB · 非压缩</text>
+  <rect class="enc" x="890" y="405" width="210" height="80" rx="8"/>
+  <text class="tt" x="995" y="432">u_sdram (sdr_as_ram)</text>
+  <text class="ts" x="995" y="452">+ EG_PHY_SDRAM_2M_32</text>
+  <text class="ts" x="995" y="472">125MHz · 32bit · 8MB</text>
 
-  <rect class="self" x="550" y="405" width="150" height="70" rx="8"/>
-  <text class="tt" x="625" y="432">fb_writer</text>
-  <text class="ts" x="625" y="453">写 WR1 / WR2</text>
+  <rect class="self" x="1140" y="405" width="160" height="80" rx="8"/>
+  <text class="tt" x="1220" y="432">video_delay</text>
+  <text class="ts" x="1220" y="452">双路锁步弹出对齐</text>
+  <text class="ts" x="1220" y="472">输出 rgb_a/b + x/y</text>
 
-  <rect class="self" x="730" y="395" width="230" height="90" rx="8"/>
-  <text class="tt" x="845" y="422">sdram_ctrl_wrap</text>
-  <text class="ts" x="845" y="444">4 端口 · 32bit · 100MHz</text>
-  <text class="ts" x="845" y="464">WR1/A · WR2/B · RD1/A · RD2/B</text>
+  <rect class="self" x="410" y="512" width="440" height="42" rx="8"/>
+  <text class="tt" x="630" y="538">swap_ctrl：检测 disp_buf_idx 切换 · 在 vs 期推进 alpha (0→255)</text>
 
-  <rect class="ip" x="1000" y="405" width="170" height="70" rx="8"/>
-  <text class="tt" x="1085" y="432">片内 SDRAM</text>
-  <text class="ts" x="1085" y="453">2M × 32 = 8MB</text>
+  <rect class="note" x="1330" y="295" width="390" height="235" rx="10"/>
+  <text class="tl" x="1350" y="322" font-weight="600">为什么复用 frame_read_write？</text>
+  <text class="tl" x="1350" y="348">1. 原生 32bit ({R,G,B,8'h0})，与 sdr_as_ram 匹配</text>
+  <text class="tl" x="1350" y="372">2. 天然保留 WRITE_V_FLIP=1，BMP 自动翻正</text>
+  <text class="tl" x="1350" y="396">3. 扩双读仅增 +224 LUT / +2 BRAM9K</text>
+  <text class="tl" x="1350" y="424" font-weight="600">地址与锁步规则：</text>
+  <text class="tl" x="1350" y="448">· BUF0：0x000000 (307,200 字)</text>
+  <text class="tl" x="1350" y="472">· BUF1：0x04B000 (307,200 字)</text>
+  <text class="tl" x="1350" y="496">· rfifo_a / rfifo_b 共用 read_en 锁步弹出</text>
 
-  <rect class="self" x="1210" y="395" width="200" height="90" rx="8"/>
-  <text class="tt" x="1310" y="422">fb_mgr_dual</text>
-  <text class="ts" x="1310" y="444">RD1=A · RD2=B</text>
-  <text class="ts" x="1310" y="464">双读 · 自动回绕</text>
+  <path class="link" d="M180,330 L220,330" marker-end="url(#a)"/>
+  <path class="link" d="M370,330 L410,330" marker-end="url(#a)"/>
+  <path class="link" d="M565,360 L565,395" marker-end="url(#a)"/>
+  <path class="link" d="M850,445 L890,445" marker-start="url(#as)" marker-end="url(#a)"/>
+  <path class="link" d="M850,420 L870,420 L870,385 L1220,385 L1220,405" marker-end="url(#a)"/>
+  <text class="sm" x="1045" y="379" text-anchor="middle">read_data_a[31:8] / read_data_b[31:8]</text>
 
-  <rect class="self" x="180" y="505" width="340" height="45" rx="8"/>
-  <text class="tt" x="350" y="532">swap_ctrl：front/back · α 斜坡 · back_free</text>
+  <path class="link" d="M1220,485 L1220,580 L295,580 L295,650" marker-end="url(#a)"/>
+  <text class="sm" x="760" y="574" text-anchor="middle">24-bit rgb_a / rgb_b + hs/vs/de/x/y</text>
 
-  <rect class="note" x="1440" y="300" width="310" height="220" rx="10"/>
-  <text class="tl" x="1460" y="326" font-weight="600">地址分区（32bit / 像素）</text>
-  <text class="tl" x="1460" y="354">帧 A：0x000000，307,200 字</text>
-  <text class="tl" x="1460" y="378">帧 B：0x04B000，307,200 字</text>
-  <text class="tl" x="1460" y="406">RD1=A / RD2=B 同时读</text>
-  <text class="tl" x="1460" y="430">读口只初始化 LOAD 一次</text>
-  <text class="tl" x="1460" y="454">A/B 同时 pop（保持对齐）</text>
-  <text class="tl" x="1460" y="478">换帧只在 V-BLANK 生效</text>
+  <path class="ctrl" d="M410,532 L295,532 L295,650" marker-end="url(#ac)"/>
+  <text class="sm" x="305" y="595">alpha / mode</text>
 
-  <path class="link" d="M170,330 L200,330" marker-end="url(#a)"/>
-  <path class="link" d="M340,330 L370,330" marker-end="url(#a)"/>
-  <path class="link" d="M500,330 L530,330" marker-end="url(#a)"/>
-  <path class="link" d="M435,360 L435,400" marker-end="url(#a)"/>
-  <path class="link" d="M520,440 L550,440" marker-end="url(#a)"/>
-  <path class="link" d="M700,440 L730,440" marker-end="url(#a)"/>
-  <path class="link" d="M960,440 L1000,440" marker-start="url(#as)" marker-end="url(#a)"/>
-  <path class="link" d="M900,395 L900,380 L1310,380 L1310,395" marker-end="url(#a)"/>
-  <text class="sm" x="1120" y="374" text-anchor="middle">RD1(A) / RD2(B)</text>
-
-  <path class="link" d="M1310,485 L1310,580 L310,580 L310,650" marker-end="url(#a)"/>
-  <text class="sm" x="800" y="574" text-anchor="middle">A/B 像素 + 时序</text>
-
-  <path class="ctrl" d="M350,505 L350,480" marker-end="url(#ac)"/>
-  <text class="sm" x="360" y="500">back_free</text>
-  <path class="ctrl" d="M520,527 L625,527 L625,475" marker-end="url(#ac)"/>
-  <text class="sm" x="535" y="522">wr_buf</text>
-  <path class="ctrl" d="M265,550 L265,650" marker-end="url(#ac)"/>
-  <text class="sm" x="275" y="590">α</text>
-
-  <!-- ================= ③ 视频流水线 ================= -->
+  <!-- ================= ③ 24-bit 视频与多图层 OSD 流水线 ================= -->
   <rect class="band" x="50" y="600" width="1700" height="250" rx="12"/>
-  <text class="h" x="70" y="624">③ 视频流水线</text>
+  <text class="h" x="70" y="624">③ 24-bit RGB888 视频与多图层 OSD 流水线（25MHz video_clk）</text>
 
   <rect class="off" x="60" y="650" width="140" height="80" rx="8"/>
-  <text class="tt" x="130" y="674">video_timing</text>
+  <text class="tt" x="130" y="674">video_timing_data</text>
   <text class="ts" x="130" y="694">640×480 @ 800×525</text>
-  <text class="ts" x="130" y="714">hs / vs / de / x / y</text>
+  <text class="ts" x="130" y="714">hs / vs / de / read_req</text>
 
-  <rect class="self" x="230" y="650" width="130" height="80" rx="8"/>
-  <text class="tt" x="295" y="674">transition</text>
-  <text class="ts" x="295" y="694">A/B 交叉溶解</text>
-  <text class="ts" x="295" y="714">α 0 → 255</text>
+  <rect class="self" x="230" y="650" width="145" height="80" rx="8"/>
+  <text class="tt" x="302" y="674">transition (24bit)</text>
+  <text class="ts" x="302" y="694">A/B 交叉溶解 + 滑动</text>
+  <text class="ts" x="302" y="714">无图彩条回退</text>
 
-  <rect class="self" x="390" y="650" width="120" height="80" rx="8"/>
-  <text class="tt" x="450" y="674">video_proc</text>
-  <text class="ts" x="450" y="694">亮度 / 对比度</text>
-  <text class="ts" x="450" y="714">实时</text>
+  <rect class="self" x="405" y="650" width="140" height="80" rx="8"/>
+  <text class="tt" x="475" y="674">video_proc (24bit)</text>
+  <text class="ts" x="475" y="694">亮度 / 对比度调节</text>
+  <text class="ts" x="475" y="714">2 拍严格锁步对齐</text>
 
-  <rect class="self" x="540" y="650" width="180" height="80" rx="8"/>
-  <text class="tt" x="630" y="672">text_layer + font_rom_cn</text>
-  <text class="ts" x="630" y="692">中文 16×16 · 512 字</text>
-  <text class="ts" x="630" y="712">ASCII 8×16</text>
+  <rect class="self" x="575" y="650" width="335" height="80" rx="8"/>
+  <text class="tt" x="742" y="672">osd_composer（多图层 Alpha 合成）</text>
+  <text class="ts" x="742" y="692">64字中文16×16跑马灯 + 安路Logo + 时间戳MM:SS</text>
+  <text class="ts" x="742" y="712">+ 参数回显(BRT/CNT/IMG) + 实时声波曲线/8段频谱</text>
 
-  <rect class="self" x="750" y="650" width="150" height="80" rx="8"/>
-  <text class="tt" x="825" y="674">osd_layer</text>
-  <text class="ts" x="825" y="694">字幕 / 频谱</text>
-  <text class="ts" x="825" y="714">alpha 混合</text>
+  <rect class="off" x="940" y="650" width="145" height="80" rx="8"/>
+  <text class="tt" x="1012" y="674">video_rgb_to_axis</text>
+  <text class="ts" x="1012" y="694">RGB888 / DE / VS</text>
+  <text class="ts" x="1012" y="714">→ AXIS (SOF/EOL)</text>
 
-  <rect class="off" x="930" y="650" width="150" height="80" rx="8"/>
-  <text class="tt" x="1005" y="674">video_rgb_to_axis</text>
-  <text class="ts" x="1005" y="694">RGB / DE / VS</text>
-  <text class="ts" x="1005" y="714">→ AXIS</text>
+  <rect class="enc" x="1115" y="650" width="180" height="80" rx="8"/>
+  <text class="tt" x="1205" y="670">HDMI 1.4b TX 核</text>
+  <text class="ts" x="1205" y="690">加密 IP（黑盒）</text>
+  <text class="ts" x="1205" y="710">音频数据岛 + ACR</text>
+  <text class="ts" x="1205" y="726">EDID 触发 = 0</text>
 
-  <rect class="enc" x="1110" y="650" width="180" height="80" rx="8"/>
-  <text class="tt" x="1200" y="670">HDMI 1.4b TX 核</text>
-  <text class="ts" x="1200" y="690">加密 IP（黑盒）</text>
-  <text class="ts" x="1200" y="710">音频数据岛 + ACR</text>
-  <text class="ts" x="1200" y="726">EDID 触发 = 0</text>
+  <rect class="off" x="1325" y="650" width="150" height="80" rx="8"/>
+  <text class="tt" x="1400" y="674">hdmi_phy_wrapper</text>
+  <text class="ts" x="1400" y="694">10bit TMDS</text>
+  <text class="ts" x="1400" y="714">→ LVDS（ODDR）</text>
 
-  <rect class="off" x="1320" y="650" width="150" height="80" rx="8"/>
-  <text class="tt" x="1395" y="674">hdmi_phy_wrapper</text>
-  <text class="ts" x="1395" y="694">10bit TMDS</text>
-  <text class="ts" x="1395" y="714">→ LVDS（ODDR）</text>
+  <rect class="note" x="1505" y="650" width="225" height="80" rx="10"/>
+  <text class="tl" x="1520" y="676" font-weight="600">扩展要求全覆盖</text>
+  <text class="tl" x="1520" y="698">① 字幕/Logo/时间戳 ② 溶解/滑动</text>
+  <text class="tl" x="1520" y="718">④ 亮度对比度+OSD ⑤ 波形+频谱</text>
 
-  <rect class="note" x="1510" y="650" width="220" height="80" rx="10"/>
-  <text class="tl" x="1528" y="678" font-weight="600">固定延迟锁步</text>
-  <text class="tl" x="1528" y="700">rgb/hs/vs/de/x/y</text>
-  <text class="tl" x="1528" y="720">换帧只在 V-BLANK</text>
-
-  <rect class="ext" x="1320" y="760" width="150" height="46" rx="8"/>
-  <text class="ts" x="1395" y="780">HDMI_CLK / D0 / D1 / D2</text>
-  <text class="ts" x="1395" y="796">→ 显示器</text>
+  <rect class="ext" x="1325" y="760" width="150" height="46" rx="8"/>
+  <text class="ts" x="1400" y="780">HDMI_CLK / D0 / D1 / D2</text>
+  <text class="ts" x="1400" y="796">→ 显示器（画面+声音）</text>
 
   <path class="link" d="M200,690 L230,690" marker-end="url(#a)"/>
-  <path class="link" d="M360,690 L390,690" marker-end="url(#a)"/>
-  <path class="link" d="M510,690 L540,690" marker-end="url(#a)"/>
-  <path class="link" d="M720,690 L750,690" marker-end="url(#a)"/>
-  <path class="link" d="M900,690 L930,690" marker-end="url(#a)"/>
-  <path class="link" d="M1080,690 L1110,690" marker-end="url(#a)"/>
-  <path class="link" d="M1290,690 L1320,690" marker-end="url(#a)"/>
-  <path class="link" d="M1395,730 L1395,760" marker-end="url(#a)"/>
+  <path class="link" d="M375,690 L405,690" marker-end="url(#a)"/>
+  <path class="link" d="M545,690 L575,690" marker-end="url(#a)"/>
+  <path class="link" d="M910,690 L940,690" marker-end="url(#a)"/>
+  <path class="link" d="M1085,690 L1115,690" marker-end="url(#a)"/>
+  <path class="link" d="M1295,690 L1325,690" marker-end="url(#a)"/>
+  <path class="link" d="M1400,730 L1400,760" marker-end="url(#a)"/>
 
-  <text class="sm" x="70" y="820">各级同时延迟 rgb/hs/vs/de/x/y；α 由 swap_ctrl 在 frame_start 更新。</text>
+  <text class="sm" x="70" y="820">全链路 24-bit RGB888；各级严格锁步延迟 rgb/hs/vs/de/x/y；换帧与参数更新均对齐 vs 消隐期。</text>
 
-  <!-- ================= ④ 音频 ================= -->
+  <!-- ================= ④ 板载音频合成与可视化 ================= -->
   <rect class="band" x="50" y="875" width="1700" height="175" rx="12"/>
-  <text class="h" x="70" y="899">④ 音频（48kHz · HDMI 内嵌 · 12.288MHz）</text>
+  <text class="h" x="70" y="899">④ 板载音频合成与声波/频谱可视化（48kHz · HDMI 数据岛内嵌）</text>
 
-  <rect class="off" x="70" y="920" width="300" height="50" rx="8"/>
-  <text class="tt" x="220" y="941">① 测试音（基线）</text>
-  <text class="ts" x="220" y="959">I2S tone → I2S_receiver → PCM</text>
+  <rect class="off" x="70" y="915" width="320" height="50" rx="8"/>
+  <text class="tt" x="230" y="936">L1 音阶测试音（hdmi_audio_tone_i2s）</text>
+  <text class="ts" x="230" y="954">满足赛题基础要求③ · 可按键随时切回</text>
 
-  <rect class="self" x="70" y="985" width="300" height="50" rx="8"/>
-  <text class="tt" x="220" y="1006">② TF WAV（最终目标）</text>
-  <text class="ts" x="220" y="1024">wav_to_pcm → audio_bram → pcm_player</text>
+  <rect class="self" x="70" y="980" width="320" height="50" rx="8"/>
+  <text class="tt" x="230" y="1001">L2 多谐波/双音伴奏波表合成（主推）</text>
+  <text class="ts" x="230" y="1019">主旋律 + 低音和弦 + 基波/泛音波表 + ADSR包络</text>
 
-  <rect class="self" x="420" y="950" width="140" height="60" rx="8"/>
-  <text class="tt" x="490" y="975">audio_mux</text>
-  <text class="ts" x="490" y="995">二选一</text>
+  <rect class="self" x="430" y="945" width="160" height="60" rx="8"/>
+  <text class="tt" x="510" y="970">audio_mux</text>
+  <text class="ts" x="510" y="990">L1 / L2 切换</text>
 
-  <rect class="off" x="600" y="950" width="170" height="60" rx="8"/>
-  <text class="tt" x="685" y="975">audio_arc_calculate</text>
-  <text class="ts" x="685" y="995">ACR：N = 6144</text>
+  <rect class="off" x="620" y="945" width="170" height="60" rx="8"/>
+  <text class="tt" x="705" y="970">I2S_receiver</text>
+  <text class="ts" x="705" y="990">12.288M → 25M 24bit PCM</text>
 
-  <rect class="self" x="800" y="950" width="170" height="60" rx="8"/>
-  <text class="tt" x="885" y="972">audio_viz</text>
-  <text class="ts" x="885" y="990">Goertzel 频谱柱</text>
-  <text class="sm" x="885" y="1006" text-anchor="middle">→ I6 ③ OSD</text>
+  <rect class="off" x="820" y="945" width="180" height="60" rx="8"/>
+  <text class="tt" x="910" y="970">audio_arc_calculate</text>
+  <text class="ts" x="910" y="990">ACR：N=6144 · 动态CTS</text>
 
-  <rect class="self" x="1000" y="950" width="150" height="60" rx="8" stroke-dasharray="5 4"/>
-  <text class="tt" x="1075" y="972">pwm_audio</text>
-  <text class="ts" x="1075" y="990">F3 备份</text>
-  <text class="sm" x="1075" y="1006" text-anchor="middle">可选</text>
+  <rect class="self" x="1040" y="935" width="340" height="80" rx="8"/>
+  <text class="tt" x="1210" y="960">audio_viz（双模音频可视化）</text>
+  <text class="ts" x="1210" y="980">1) 640×8bit 双口 RAM 实时示波器声波曲线（0 DSP）</text>
+  <text class="ts" x="1210" y="1000">2) 8 段频谱能量柱 + 峰值保持缓降 → 送 osd_composer</text>
 
-  <path class="link" d="M370,945 L395,945 L395,1010 L370,1010"/>
-  <path class="link" d="M395,980 L420,980" marker-end="url(#a)"/>
-  <path class="link" d="M560,980 L600,980" marker-end="url(#a)"/>
-  <path class="link" d="M685,950 L685,865 L1200,865 L1200,730" marker-end="url(#a)"/>
-  <text class="sm" x="900" y="858" text-anchor="middle">I5：PCM + ACR</text>
+  <path class="link" d="M390,940 L410,940 L410,975 L430,975" marker-end="url(#a)"/>
+  <path class="link" d="M390,1005 L410,1005 L410,975"/>
+  <path class="link" d="M590,975 L620,975" marker-end="url(#a)"/>
+  <path class="link" d="M790,975 L820,975" marker-end="url(#a)"/>
+  <path class="link" d="M910,945 L910,865 L1205,865 L1205,730" marker-end="url(#a)"/>
+  <text class="sm" x="1055" y="858" text-anchor="middle">I5：24-bit PCM + ACR → HDMI 1.4b 核</text>
 
-  <path class="ctrl" d="M1150,980 L1200,980" marker-end="url(#ac)"/>
-  <text class="sm" x="1210" y="985">F3</text>
-
-  <text class="sm" x="70" y="1038">WAV 经 SD 分时复用（②）；测试音为基线，WAV 为最终目标。</text>
+  <path class="link" d="M805,975 L805,1030 L1210,1030 L1210,1015" marker-end="url(#a)"/>
+  <path class="ctrl" d="M1210,935 L1210,890 L742,890 L742,730" marker-end="url(#ac)"/>
+  <text class="sm" x="980" y="884" text-anchor="middle">I6：实时波形 wave_y + 8段频谱柱 spec_bars</text>
 
   <!-- ================= ⑤ 交互与控制 ================= -->
   <rect class="band" x="50" y="1075" width="1700" height="170" rx="12"/>
-  <text class="h" x="70" y="1099">⑤ 交互与控制（50MHz · 慢变量 2FF）</text>
+  <text class="h" x="70" y="1099">⑤ 交互与控制（50MHz clk · 16 键完整映射 + 4 位数码管 + 8 位 LED）</text>
 
-  <rect class="ext" x="70" y="1135" width="140" height="70" rx="8"/>
-  <text class="tt" x="140" y="1162">4×4 矩阵键盘</text>
-  <text class="ts" x="140" y="1182">16 键</text>
+  <rect class="ext" x="70" y="1135" width="150" height="70" rx="8"/>
+  <text class="tt" x="145" y="1162">4×4 矩阵键盘</text>
+  <text class="ts" x="145" y="1182">K1 ~ K16</text>
 
-  <rect class="self" x="230" y="1135" width="140" height="70" rx="8"/>
-  <text class="tt" x="300" y="1162">keyboard_scan</text>
-  <text class="ts" x="300" y="1182">行扫描</text>
+  <rect class="off" x="250" y="1135" width="160" height="70" rx="8"/>
+  <text class="tt" x="330" y="1162">keyboard_scan</text>
+  <text class="ts" x="330" y="1182">+ key_filter (20ms)</text>
 
-  <rect class="self" x="390" y="1135" width="140" height="70" rx="8"/>
-  <text class="tt" x="460" y="1162">key_filter</text>
-  <text class="ts" x="460" y="1182">20ms 消抖</text>
+  <rect class="self" x="440" y="1135" width="320" height="70" rx="8"/>
+  <text class="tt" x="600" y="1158">regs（控制寄存器 + 1Hz 时间戳）</text>
+  <text class="ts" x="600" y="1178">亮度/对比度/转场模式/OSD开关/音源/音色/可视化模式</text>
+  <text class="ts" x="600" y="1195">uptime_min : uptime_sec</text>
 
-  <rect class="self" x="550" y="1135" width="130" height="70" rx="8"/>
-  <text class="tt" x="615" y="1162">regs</text>
-  <text class="ts" x="615" y="1182">参数 / 模式</text>
+  <rect class="off" x="790" y="1135" width="220" height="70" rx="8"/>
+  <text class="tt" x="900" y="1162">seg_led + 8 LED</text>
+  <text class="ts" x="900" y="1182">显示 SD状态/图片号/转场/音源</text>
 
-  <rect class="self" x="700" y="1135" width="170" height="70" rx="8"/>
-  <text class="tt" x="785" y="1162">media_sched</text>
-  <text class="ts" x="785" y="1182">图/音时间片</text>
+  <path class="link" d="M220,1170 L250,1170" marker-end="url(#a)"/>
+  <path class="link" d="M410,1170 L440,1170" marker-end="url(#a)"/>
+  <path class="link" d="M760,1170 L790,1170" marker-end="url(#a)"/>
 
-  <rect class="self" x="890" y="1135" width="140" height="70" rx="8"/>
-  <text class="tt" x="960" y="1162">seg_led</text>
-  <text class="ts" x="960" y="1182">数码管 / LED</text>
+  <path class="ctrl" d="M330,1205 L330,1225 L30,1225 L30,330 L410,330" marker-end="url(#ac)"/>
+  <text class="sm" x="60" y="1218">K1(下一张) / K2(自动轮播) → sd_card_bmp</text>
 
-  <path class="link" d="M210,1170 L230,1170" marker-end="url(#a)"/>
-  <path class="link" d="M370,1170 L390,1170" marker-end="url(#a)"/>
-  <path class="link" d="M530,1170 L550,1170" marker-end="url(#a)"/>
-
-  <path class="ctrl" d="M460,1205 L460,1225 L30,1225 L30,445 L180,445" marker-end="url(#ac)"/>
-  <text class="sm" x="60" y="1218">I7：key1 / key2</text>
-
-  <path class="ctrl" d="M680,1170 L1765,1170 L1765,640 L450,640 L450,650" marker-end="url(#ac)"/>
-  <text class="sm" x="1300" y="633">I3：亮度 / 对比度 / OSD</text>
-
-  <path class="ctrl" d="M785,1135 L785,1055" marker-end="url(#ac)"/>
-  <text class="sm" x="795" y="1128">I9：SD 分时</text>
-
-  <text class="sm" x="1050" y="1160">I4：state_code / 媒体序号</text>
-  <text class="sm" x="1050" y="1185">key1/key2 → sd_card_bmp；其余键 → regs</text>
+  <path class="ctrl" d="M600,1135 L600,1055 L1765,1055 L1765,640 L742,640 L742,650" marker-end="url(#ac)"/>
+  <text class="sm" x="1300" y="633">I4：亮度 / 对比度 / 转场模式 / OSD开关 / 时间戳</text>
 
   <!-- ================= 图例 ================= -->
   <rect class="off" x="60" y="1265" width="16" height="16" rx="3"/>
-  <text class="lg" x="84" y="1278">官方 RTL / 明文可复用</text>
+  <text class="lg" x="84" y="1278">base 已验证模块（直接复用）</text>
 
   <rect class="self" x="300" y="1265" width="16" height="16" rx="3"/>
-  <text class="lg" x="324" y="1278">自研模块</text>
+  <text class="lg" x="324" y="1278">自研/扩展模块（M1–M3 合入）</text>
 
-  <rect class="enc" x="500" y="1265" width="16" height="16" rx="3"/>
-  <text class="lg" x="524" y="1278">加密 IP（黑盒例化）</text>
+  <rect class="enc" x="540" y="1265" width="16" height="16" rx="3"/>
+  <text class="lg" x="564" y="1278">官方加密 IP（黑盒例化）</text>
 
-  <rect class="ip" x="740" y="1265" width="16" height="16" rx="3"/>
-  <text class="lg" x="764" y="1278">官方 IP（PLL / SDRAM）</text>
+  <rect class="ip" x="760" y="1265" width="16" height="16" rx="3"/>
+  <text class="lg" x="784" y="1278">官方 PLL IP</text>
 
-  <rect class="ext" x="960" y="1265" width="16" height="16" rx="3"/>
-  <text class="lg" x="984" y="1278">外部器件 / 引脚</text>
+  <rect class="ext" x="940" y="1265" width="16" height="16" rx="3"/>
+  <text class="lg" x="964" y="1278">板载外设 / 引脚</text>
 
-  <path class="link" d="M1150,1273 L1190,1273" marker-end="url(#a)"/>
-  <text class="lg" x="1200" y="1278">数据流</text>
+  <path class="link" d="M1130,1273 L1170,1273" marker-end="url(#a)"/>
+  <text class="lg" x="1180" y="1278">主数据流</text>
 
-  <path class="ctrl" d="M1350,1273 L1390,1273" marker-end="url(#ac)"/>
-  <text class="lg" x="1400" y="1278">控制 / 状态（2FF）</text>
+  <path class="ctrl" d="M1320,1273 L1360,1273" marker-end="url(#ac)"/>
+  <text class="lg" x="1370" y="1278">控制 / 状态流</text>
 
-  <text class="sm" x="60" y="1312">官方基线：lab_ex5_i2s（APUG092 HDMI 1.4b + SD/ + 音频链路）· 自研增量：4 端口双读 / A/B 溶解 / 中文字库 / TF WAV / 交互</text>
+  <text class="sm" x="60" y="1312">v3.3 基线：M0 实测 3,775 LUT (19.3%) / 18 BRAM9K (28.1%)；全功能预估 ≈6,435 LUT (32.8%) / 25 BRAM9K (39.1%) / 17 DSP (58.6%)</text>
 </svg>
