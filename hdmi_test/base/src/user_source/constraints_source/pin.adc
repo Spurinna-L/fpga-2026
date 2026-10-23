@@ -1,0 +1,59 @@
+#=============================================================================
+# pin.adc — 基础通路 v1 引脚约束（大拇指 EG4S20 + 综合底板）
+#-----------------------------------------------------------------------------
+# 顶层：top（top_tf_hdmi_audio.v）
+# 说明：HDMI 只有 TMDS 4 对，无 DDC/EDID；SDRAM 为片内硬核，不占引脚。
+#=============================================================================
+
+# ---- 时钟 / 复位 ----
+set_pin_assignment	{ clk }		{ LOCATION = R7; IOSTANDARD = LVCMOS33; }
+set_pin_assignment	{ rst_n }	{ LOCATION = A9; IOSTANDARD = LVCMOS33; PULLTYPE = PULLUP; }
+
+# ---- HDMI（LVDS33）----
+set_pin_assignment	{ HDMI_CLK_P }	{ LOCATION = P1; IOSTANDARD = LVDS33; PULLTYPE = NONE; }
+set_pin_assignment	{ HDMI_D0_P }	{ LOCATION = N1; IOSTANDARD = LVDS33; PULLTYPE = NONE; }
+set_pin_assignment	{ HDMI_D1_P }	{ LOCATION = P4; IOSTANDARD = LVDS33; PULLTYPE = NONE; }
+set_pin_assignment	{ HDMI_D2_P }	{ LOCATION = J3; IOSTANDARD = LVDS33; PULLTYPE = NONE; }
+
+# ---- TF 卡（SPI）----
+set_pin_assignment	{ sd_ncs }	{ LOCATION = F13; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ sd_dclk }	{ LOCATION = F15; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ sd_mosi }	{ LOCATION = F14; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ sd_miso }	{ LOCATION = D14; IOSTANDARD = LVCMOS33; PULLTYPE = PULLUP; }
+
+# ---- 4×4 矩阵键盘 ----
+set_pin_assignment	{ kb_row[0] }	{ LOCATION = D9;  IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ kb_row[1] }	{ LOCATION = F9;  IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ kb_row[2] }	{ LOCATION = C10; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ kb_row[3] }	{ LOCATION = E10; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ kb_col[0] }	{ LOCATION = E11; IOSTANDARD = LVCMOS33; PULLTYPE = PULLUP; }
+set_pin_assignment	{ kb_col[1] }	{ LOCATION = D11; IOSTANDARD = LVCMOS33; PULLTYPE = PULLUP; }
+set_pin_assignment	{ kb_col[2] }	{ LOCATION = C11; IOSTANDARD = LVCMOS33; PULLTYPE = PULLUP; }
+set_pin_assignment	{ kb_col[3] }	{ LOCATION = F10; IOSTANDARD = LVCMOS33; PULLTYPE = PULLUP; }
+
+# ---- 4 位数码管 ----
+set_pin_assignment	{ seg_sel[0] }	{ LOCATION = C9; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_sel[1] }	{ LOCATION = B6; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_sel[2] }	{ LOCATION = A5; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_sel[3] }	{ LOCATION = A3; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_led[0] }	{ LOCATION = A4; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_led[1] }	{ LOCATION = A6; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_led[2] }	{ LOCATION = B8; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_led[3] }	{ LOCATION = E8; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_led[4] }	{ LOCATION = A7; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_led[5] }	{ LOCATION = B5; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_led[6] }	{ LOCATION = A8; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ seg_led[7] }	{ LOCATION = C8; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+
+# ---- 8 位 LED（与 R-2R 复用；本版不用 R-2R）----
+set_pin_assignment	{ led[0] }	{ LOCATION = B14; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ led[1] }	{ LOCATION = B15; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ led[2] }	{ LOCATION = B16; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ led[3] }	{ LOCATION = C15; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ led[4] }	{ LOCATION = C16; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ led[5] }	{ LOCATION = E13; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ led[6] }	{ LOCATION = E16; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+set_pin_assignment	{ led[7] }	{ LOCATION = F16; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
+
+# ---- 音频备份（本版接 0）----
+set_pin_assignment	{ audio_pwm }	{ LOCATION = F3; IOSTANDARD = LVCMOS33; DRIVESTRENGTH = 8; }
