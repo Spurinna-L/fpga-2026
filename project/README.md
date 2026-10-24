@@ -6,18 +6,20 @@
 
 ---
 
-## 1. 当前工程状态与合并说明
+## 1. 当前工程状态
 
 > **工程基线声明**：
-> - 当前**唯一主线工程**为 `hdmi_test/base/src/td_project/base.al`（已于 2026-10-23 上板跑通 M0 基础通路）；
-> - 仓库内其余旧工程（`hdmi_test/hdmi_test.al` 720p 实验、`audio_test1`、`project/` 下旧 720p/16-bit 骨架）**均已弃用**；
-> - **M1 第一步**即将 `hdmi_test/base/` 的全部已验证 RTL 与 IP 迁移合并至本目录 `project/`，作为最终发布的唯一工程。
+> - **唯一主线工程**：`project/src/td_project/main_project.al`（2026-10-23 由 `hdmi_test/base` 完整迁入，M0 基础通路已上板验证）；
+> - 历史工程（720p + DVI 实验、R-2R 音频实验、旧 16-bit/720p 骨架）已全部归档至仓库根目录 `legacy/`，**不再参与编译**；
+> - 迁移后已在 `project/src/sim` 重新跑通语法检查与 640×480/音频仿真；TD 综合与上板复测在 M1 内完成。
 
 | 模块 / 里程碑 | 状态 | 说明 |
 |:--|:--|:--|
 | **基础通路（M0）** | ✅ **已上板通过** | TF 卡 BMP + SDRAM 双缓冲 + 640×480 HDMI 1.4b + 48kHz 测试音 |
 | 开发板合规性验证 | ✅ **已确认** | 大拇指 EG4S20 开发板已验证完全符合参赛标准 |
-| **一写双读帧缓存（M1）** | 🟡 **进行中** | 复用 `frame_read_write` 架构扩展双读通道（`rfifo_a` + `rfifo_b`），保留 `WRITE_V_FLIP=1` |
+| **工程合并（M1）** | ✅ **已完成** | `base` 全量迁入 `project/src/`；旧工程归档至 `legacy/`；语法/时序/音频仿真复跑通过 |
+| **一写双读帧缓存（M1）** | ✅ **实现+仿真通过，待上板** | `frame_read_write_dual` + `frame_fifo_read_arb` + `rd_arbiter`（256 字突发轮询）；保留 `WRITE_V_FLIP=1` |
+| **16 键 regs + 数码管（M1）** | ✅ **实现完成，待上板** | 参数/转场/OSD/音源/可视化 + 1Hz 时间戳；数码管 4 位状态 |
 | **A/B 溶解 + 滑动转场（M2）** | ⚪ 待合入 | 24-bit RGB888 `transition` + `swap_ctrl` |
 | **中文滚动字幕 + 安路 Logo + 时间戳（M2）** | ⚪ 待合入 | 64 汉字 16×16 + ASCII 8×16 + 安路 Logo + `MM:SS` 时间戳 |
 | **亮度/对比度调节 + 参数 OSD（M2）** | ⚪ 待合入 | 24-bit `video_proc` + OSD 实时参数回显 |
@@ -31,7 +33,7 @@
 | 顺序 | 文档 | 内容 |
 |:--:|:--|:--|
 | 1 | [`../项目计划.md`](../项目计划.md) | 项目目标、范围、资源评估、11月4日倒排计划 |
-| 2 | [`doc/总体方案_v3.2.md`](doc/总体方案_v3.2.md) | **唯一真源**：冻结决策、一写双读帧缓存、扩展方案、资源核算 |
+| 2 | [`doc/总体方案_v3.4.md`](doc/总体方案_v3.4.md) | **唯一真源**：冻结决策、4 槽预载架构、扩展方案、资源核算 |
 | 3 | [`doc/进度看板.md`](doc/进度看板.md) | **做到哪一步了**：M0–M4 进度、实测资源与增量预算 |
 | 4 | [`doc/音频合成方案.md`](doc/音频合成方案.md) | L1 测试音 + L2 多谐波/复调波表合成 + 声波/频谱可视化 |
 | 5 | [`doc/顶层框图.svg`](doc/顶层框图.svg) | 系统顶层数据流与控制流总图 |
@@ -45,34 +47,42 @@
 
 ---
 
-## 3. 目标目录结构（`base` 合并至 `project/` 后）
+## 3. 目录结构（`base` 已合并至 `project/`）
 
 ```
 project/
-├── rtl/
-│   ├── top_tf_hdmi_audio.v          # 顶层（合并自 base，集成全部扩展）
-│   ├── common/                      # por_gen / reset_sync / vpipe_delay
-│   ├── SD/                          # 官方 SD/BMP + 一写双读 frame_read_write + sdram
-│   ├── include/                     # global_def + sdr_as_ram 加密核
-│   ├── video/                       # 24-bit transition / video_proc / test_pattern / axis
-│   ├── osd/                         # text_layer / font_rom_cn / logo_rom / osd_layer
-│   ├── audio/                       # tone_i2s / synth_player / audio_mux / audio_viz / I2S_rx / acr
-│   ├── hdmi/                        # hdmi_1_4b_transmitter_core_wrapper / hdmi_phy_wrapper
-│   ├── control/                     # keyboard_scan / key_filter / regs / seg_led
-│   └── ip/                          # sys_pll / video_pll / PLL_HDMI_AUDIO / afifo
-├── constraints/
-│   ├── pin.adc                      # 引脚约束
-│   └── timing.sdc                   # 时序约束（M4 完善异步时钟组与复位伪路径）
+├── src/
+│   ├── td_project/
+│   │   ├── main_project.al          # TD 主工程（顶层 top）
+│   │   └── al_ip/                   # PLL_HDMI_AUDIO（12.288MHz）
+│   ├── user_source/
+│   │   ├── hdl_source/
+│   │   │   ├── top_tf_hdmi_audio.v  # 顶层（M1 起集成双读与扩展）
+│   │   │   ├── SD/                  # 官方 SD/BMP + 一写双读 frame_read_write_dual + sdram
+│   │   │   ├── include/             # global_def + sdr_as_ram/sdr_init_ref/sdr_wrrd 加密核
+│   │   │   ├── hdmi1.4b_transmitter_core/  # HDMI 1.4b 加密核（黑盒）
+│   │   │   ├── ip/                  # sys_pll / video_pll / afifo（TD IP）
+│   │   │   ├── video/               # M2：transition / video_proc / osd_composer / 字库 ROM（规划）
+│   │   │   ├── audio/               # M3：synth_player / audio_mux / audio_viz（规划）
+│   │   │   └── *.v                  # 键盘/数码管/I2S/ACR/PHY/彩条等
+│   │   └── constraints_source/
+│   │       ├── pin.adc              # 引脚约束
+│   │       └── timing.sdc           # 时序约束（M4 完善异步时钟组与复位伪路径）
+│   ├── sim/                         # iverilog 语法检查 + tb_timing/tb_audio
+│   └── tools/                       # BMP 生成/检查 + output_bmp/
 ├── doc/                             # 全套设计文档 + 顶层框图.svg + tools/
-├── main_project.al                  # TD 工程文件
 └── README.md
 ```
+
+> **路径约束**：`SD/sdram.v` 与 `include/sdr_init_ref.enc.v` 用
+> `` `include "../user_source/hdl_source/include/global_def.v" ``（相对 TD 工程目录），
+> 所以 `src/td_project/` 必须与 `src/user_source/` 保持同级，加密核与 Vendor RTL 不得移动。
 
 ---
 
 ## 4. 快速开始
 
-1. 使用 **Anlogic TD** 打开主线工程（当前为 `hdmi_test/base/src/td_project/base.al`，合并后为 `project/main_project.al`）；
+1. 使用 **Anlogic TD** 打开主线工程 `project/src/td_project/main_project.al`；
 2. 综合 → 布局布线 → 下载 `.bit`（或烧写 QSPI Flash）；
 3. TF 卡：格式化为 **FAT32**，根目录放入 `01.bmp`…`04.bmp`（640×480、24-bit RGB、非压缩）；
 4. HDMI 接带喇叭/音频输出的显示器；
