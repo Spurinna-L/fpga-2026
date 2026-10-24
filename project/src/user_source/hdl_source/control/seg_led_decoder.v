@@ -1,0 +1,46 @@
+//=============================================================================
+// seg_led_decoder.v — 4bit 十六进制 → 七段段码译码
+//-----------------------------------------------------------------------------
+// 功能：
+//   把 0..F 译成共阴段码（[6:0] = a..g），dot_ena=1 时置位 [7] 点亮小数点。
+//
+// 接口：
+//   in  data_disp[3:0]  待显示数字
+//   in  dot_ena         小数点使能
+//   out seg_led[7:0]    段码输出（高有效）
+//
+// 内部例化：无
+//
+// 备注：
+//   段码表为共阴接法；若换共阳数码管需整体取反。
+//=============================================================================
+module seg_led_decoder(data_disp,seg_led,dot_ena);
+    input [3:0] data_disp;
+	input dot_ena; 
+    output [7:0] seg_led;	
+    
+	reg [7:0] seg_led_notdot;
+    always@(*)
+        case(data_disp)
+            4'h0 : seg_led_notdot = 8'h3f;
+            4'h1 : seg_led_notdot = 8'h06;
+            4'h2 : seg_led_notdot = 8'h5b;
+            4'h3 : seg_led_notdot = 8'h4f;
+            4'h4 : seg_led_notdot = 8'h66;
+            4'h5 : seg_led_notdot = 8'h6d;
+            4'h6 : seg_led_notdot = 8'h7d;
+            4'h7 : seg_led_notdot = 8'h07;
+            4'h8 : seg_led_notdot = 8'h7f;
+            4'h9 : seg_led_notdot = 8'h6f;
+            4'ha : seg_led_notdot = 8'h77;
+            4'hb : seg_led_notdot = 8'h7c;
+            4'hc : seg_led_notdot = 8'h39;
+            4'hd : seg_led_notdot = 8'h5e;
+            4'he : seg_led_notdot = 8'h79;
+            4'hf : seg_led_notdot = 8'h71;
+            default :seg_led_notdot = 8'h00;
+        endcase            
+                
+       assign   seg_led = dot_ena?  (seg_led_notdot + 8'h80) : seg_led_notdot;
+        
+endmodule 

@@ -24,6 +24,8 @@ transcript
 work/
 hdmi_test/sim/*.out
 hdmi_test/sim/*.bmp
+**/sim/*.out
+**/sim/*.bmp
 
 # 临时文件和编辑器备份
 *.tmp
