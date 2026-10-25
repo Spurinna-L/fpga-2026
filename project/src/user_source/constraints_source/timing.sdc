@@ -9,7 +9,7 @@
 #
 # 时序策略（M1 修订）:
 #   1. 所有跨 PLL 域路径都已由“异步 FIFO / 2FF 同步器 / 4 相握手”处理，
-#      因此把 sd / mem / video 三个域声明为异步，避免伪路径掩盖真实问题；
+#      因此把 clk / sd / mem / video 四个域声明为异步，避免伪路径掩盖真实问题；
 #   2. 复位已改为每域独立 reset_sync（异步置位、同步释放），不再有
 #      por_cnt -> 各域异步复位端的 recovery 违例；
 #   3. frame_fifo_write 的 into_burst 已打一拍，切断 125MHz 长组合路径；
@@ -55,6 +55,7 @@ set_clock_groups -asynchronous \
 #    - frame_write_toggle          : Toggle + 3FF 边沿检测
 # ------------------------------------------------------------
 set_clock_groups -asynchronous \
+    -group [get_clocks {clk}] \
     -group [get_clocks {sd_card_clk}] \
     -group [get_clocks {ext_mem_clk}] \
     -group [get_clocks {video_clk}]

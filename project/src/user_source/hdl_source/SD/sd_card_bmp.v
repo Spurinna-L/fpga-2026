@@ -39,6 +39,7 @@
 // 扫描、BMP 解析、加载、双缓冲调度、按键
 module sd_card_bmp #(
     parameter integer CLK_FREQ_HZ       = 100_000_000,
+    parameter integer AUTO_PERIOD_S     = 4,            // 自动轮播间隔（秒）
     parameter [31:0]  SCAN_START_SECTOR = 32'd0,    // 扫描起始扇区
     parameter [31:0]  SCAN_MAX_SECTOR   = 32'd131071,   // 扫描最大扇区 
     parameter [2:0]   SCAN_TARGET_COUNT = 3'd4  // 扫描目标数量
@@ -113,7 +114,7 @@ wire auto_tick;
 assign write_en   = bmp_data_wr_en;
 assign write_data = {bmp_data[23:16], bmp_data[15:8], bmp_data[7:0], 8'b0};
 assign img_idx_o  = img_idx;
-assign auto_tick  = (auto_cnt == (CLK_FREQ_HZ - 1));
+assign auto_tick  = (auto_cnt == (CLK_FREQ_HZ * AUTO_PERIOD_S - 1));
 assign write_finish_pulse = wrfin_tgl_sync[2] ^ wrfin_tgl_sync[1];
 
 key_press_debounce #(

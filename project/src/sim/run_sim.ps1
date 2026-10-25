@@ -43,6 +43,52 @@ Write-Host "=== regs (16 keys / seg / 1Hz) ==="
     "$h\control\regs.v"
 & $vvp "$here\tb_regs.out"
 
+Write-Host "=== M2 line read (A/B 1280 words) ==="
+& $iv -g2012 -s tb_line_read -o "$here\tb_line_read.out" `
+    "$here\tb_line_read.v" `
+    "$h\video\frame_line_read.v"
+& $vvp "$here\tb_line_read.out"
+
+Write-Host "=== M2 mixer (dissolve / slide) ==="
+& $iv -g2012 -s tb_mixer -o "$here\tb_mixer.out" `
+    "$here\tb_mixer.v" `
+    "$h\video\mixer.v"
+& $vvp "$here\tb_mixer.out"
+
+Write-Host "=== M2 disp_ctrl (progress / direct) ==="
+& $iv -g2012 -s tb_disp_ctrl -o "$here\tb_disp_ctrl.out" `
+    "$here\tb_disp_ctrl.v" `
+    "$h\video\disp_ctrl.v"
+& $vvp "$here\tb_disp_ctrl.out"
+
+Write-Host "=== M2 line scheduler ==="
+& $iv -g2012 -s tb_line_sched -o "$here\tb_line_sched.out" `
+    "$here\tb_line_sched.v" `
+    "$h\video\line_sched.v"
+& $vvp "$here\tb_line_sched.out"
+
+Write-Host "=== M2 line buffer (dual clock) ==="
+& $iv -g2012 -s tb_line_buffer -o "$here\tb_line_buffer.out" `
+    "$here\tb_line_buffer.v" `
+    "$here\base_stubs.v" `
+    "$h\video\line_buffer.v"
+& $vvp "$here\tb_line_buffer.out"
+
+Write-Host "=== M2 video chain (line read + buffer + mixer) ==="
+& $iv -g2012 -s tb_chain -I "$h\SD" -o "$here\tb_chain.out" `
+    "$here\tb_chain.v" `
+    "$here\base_stubs.v" `
+    "$h\SD\video_timing_data.v" `
+    "$h\SD\color_bar.v" `
+    "$h\video\video_pos.v" `
+    "$h\video\line_sched.v" `
+    "$h\video\disp_ctrl.v" `
+    "$h\video\frame_line_read.v" `
+    "$h\video\line_buffer.v" `
+    "$h\video\mixer.v" `
+    "$h\video\video_delay2.v"
+& $vvp "$here\tb_chain.out"
+
 Write-Host "=== sdram selftest ==="
 & $iv -g2012 -s tb_selftest -o "$here\tb_selftest.out" `
     "$here\tb_selftest.v" `

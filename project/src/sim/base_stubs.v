@@ -163,3 +163,57 @@ module EG_LOGIC_ODDR(
 );
     assign q = clk ? d1 : d0;
 endmodule
+
+// ---- EG_LOGIC_BRAM 行为模型（仅仿真；PDPW: A 写 / B 读）----
+module EG_LOGIC_BRAM #(
+    parameter DATA_WIDTH_A = 18,
+    parameter DATA_WIDTH_B = 18,
+    parameter ADDR_WIDTH_A = 10,
+    parameter ADDR_WIDTH_B = 10,
+    parameter DATA_DEPTH_A = 1024,
+    parameter DATA_DEPTH_B = 1024,
+    parameter MODE         = "SP",
+    parameter REGMODE_A    = "NOREG",
+    parameter REGMODE_B    = "NOREG",
+    parameter WRITEMODE_A  = "NORMAL",
+    parameter WRITEMODE_B  = "NORMAL",
+    parameter RESETMODE    = "SYNC",
+    parameter IMPLEMENT    = "9K",
+    parameter INIT_FILE    = "NONE",
+    parameter FILL_ALL     = "NONE"
+)(
+    input  wire [DATA_WIDTH_A-1:0] dia,
+    input  wire [DATA_WIDTH_B-1:0] dib,
+    input  wire [ADDR_WIDTH_A-1:0] addra,
+    input  wire [ADDR_WIDTH_B-1:0] addrb,
+    input  wire cea,
+    input  wire ceb,
+    input  wire ocea,
+    input  wire oceb,
+    input  wire clka,
+    input  wire clkb,
+    input  wire wea,
+    input  wire web,
+    input  wire bea,
+    input  wire beb,
+    input  wire rsta,
+    input  wire rstb,
+    output wire [DATA_WIDTH_A-1:0] doa,
+    output wire [DATA_WIDTH_B-1:0] dob
+);
+    reg [DATA_WIDTH_A-1:0] mem [0:DATA_DEPTH_A-1];
+    reg [DATA_WIDTH_B-1:0] dob_r;
+
+    always @(posedge clka) begin
+        if (cea && wea)
+            mem[addra] <= dia;
+    end
+
+    always @(posedge clkb) begin
+        if (ceb)
+            dob_r <= mem[addrb];
+    end
+
+    assign doa = {DATA_WIDTH_A{1'b0}};
+    assign dob = dob_r;
+endmodule

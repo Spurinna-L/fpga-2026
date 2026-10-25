@@ -12,6 +12,7 @@
 // 接口：
 //   out read_req / in read_req_ack    每帧一次的读请求握手
 //   out hs / vs / de                  延迟 2 拍的视频时序
+//   out v_cnt[11:0]                   行计数，供 M2 行读取调度使用
 //
 // 参数：
 //   DATA_WIDTH = 16   历史遗留参数，本模块不再传像素数据
@@ -37,7 +38,8 @@ module video_timing_data
 	//input[DATA_WIDTH - 1:0]     read_data,          // Read data
 	output                      hs,                 // horizontal synchronization
 	output                      vs,                 // vertical synchronization
-	output                      de                  // video valid
+	output                      de,                 // video valid
+	output[11:0]                v_cnt               // vertical line counter (M2)
 	//output[DATA_WIDTH - 1:0]    vout_data           // video data
 );
 wire                   video_hs;
@@ -115,6 +117,7 @@ color_bar color_bar_m0(
 	.hs(video_hs),
 	.vs(video_vs),
 	.de(video_de),
+	.o_v_cnt(v_cnt),
 	.rgb_r(),
 	.rgb_g(),
 	.rgb_b()

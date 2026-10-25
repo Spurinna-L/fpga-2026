@@ -8,24 +8,25 @@
 //   完全无效。说明这颗硬核只把“顺序整段读”当作有效访问/刷新。
 //
 // 做法：
-//   在每帧读完后（read_finish）到下一个 vs 之前，顺序读 4 个槽所在的连续
-//   地址空间（0 .. 1,228,799），每帧读约 150k 字（1.2ms）：
+//   在最后一行读取完成后开始，顺序读 4 个槽所在的连续地址空间
+//   （0 .. 1,228,799），每帧读约 150k 字（1.2ms）：
 //       addr = scan_addr, scan_addr+1, ...（跨帧连续，不重置）
-//   走完 1,228,800 字后回绕到 0。整个空间约 8 帧（≈137ms）读完一遍，
-//   等价于“每个槽每隔 137ms 被顺序读一遍”。
+//   走完 1,228,800 字后回绕到 0。整个空间约 8 帧（≈137ms）读完一遍。
 //
-// 安全性：
-//   - 只在 read_finish 之后、vs 之前工作，此时帧读 FSM 处于 IDLE；
-//   - 扫描期间的读数据对帧缓存屏蔽（不写 rfifo）；
-//   - 每帧最多 150k 拍，留出余量给最后一个读数据返回和 vs 前的排空。
+// M2 排空保护：
+//   行缓冲没有 rfifo 的 fifo_aclr，扫描停止发 en 后仍有约 10 拍读数据在途。
+//   因此 stop（或达到 MAX_CYCLES）后 active 继续保持 DRAIN_CYCLES 拍，
+//   期间 en=0；等所有在途数据返回后，顶层才允许行读取接管 App_rd。
 //
 // 接口：
-//   start   帧读完成脉冲（ext_mem_clk 域，单拍）
-//   stop    下一帧 read_req（已同步到 ext_mem_clk），高电平立即停止
-//   active  正在扫描（顶层用它切换 App_rd_en/addr 并屏蔽 rfifo 写）
+//   start   最后一行读取完成脉冲（ext_mem_clk 域，单拍）
+//   stop    下一帧首行预取窗口（level，高电平停止）
+//   active  正在扫描或排空（顶层用它切换 App_rd_en/addr 并屏蔽行读取）
 //   en/addr SDRAM 读命令
 //=============================================================================
-module sdr_refresh_sweep (
+module sdr_refresh_sweep #(
+    parameter [17:0] DRAIN_CYCLES = 18'd16
+)(
     input  wire        clk,
     input  wire        rst,
     input  wire        start,
@@ -41,6 +42,8 @@ module sdr_refresh_sweep (
 
     reg [20:0] scan_addr;   // 跨帧保持，顺序推进
     reg [17:0] dur;
+    reg        draining;
+    reg [17:0] drain_cnt;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -49,16 +52,30 @@ module sdr_refresh_sweep (
             addr      <= 21'd0;
             scan_addr <= 21'd0;
             dur       <= 18'd0;
+            draining  <= 1'b0;
+            drain_cnt <= 18'd0;
         end else if (start) begin
             active    <= 1'b1;
             en        <= 1'b1;
             addr      <= scan_addr;
             dur       <= 18'd0;
+            draining  <= 1'b0;
+            drain_cnt <= 18'd0;
             scan_addr <= (scan_addr == LAST_ADDR) ? 21'd0 : (scan_addr + 21'd1);
         end else if (active) begin
-            if (stop || (dur == MAX_CYCLES)) begin
-                active <= 1'b0;
-                en     <= 1'b0;
+            if (draining) begin
+                // 排空：不再发命令，但 active 保持，防止行读取提前接管
+                en <= 1'b0;
+                if (drain_cnt >= DRAIN_CYCLES - 1) begin
+                    active   <= 1'b0;
+                    draining <= 1'b0;
+                end else begin
+                    drain_cnt <= drain_cnt + 18'd1;
+                end
+            end else if (stop || (dur == MAX_CYCLES)) begin
+                en        <= 1'b0;
+                draining  <= 1'b1;
+                drain_cnt <= 18'd0;
             end else begin
                 addr      <= scan_addr;
                 scan_addr <= (scan_addr == LAST_ADDR) ? 21'd0 : (scan_addr + 21'd1);

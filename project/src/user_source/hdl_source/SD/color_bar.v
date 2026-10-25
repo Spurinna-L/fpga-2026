@@ -33,7 +33,8 @@ module color_bar(
 	output                de,            //video valid
 	output[7:0]           rgb_r,         //video red data
 	output[7:0]           rgb_g,         //video green data
-	output[7:0]           rgb_b          //video blue data
+	output[7:0]           rgb_b,         //video blue data
+	output[11:0]          o_v_cnt        //vertical line counter (M2 line scheduler)
 );
 //video timing parameter definition
 `ifdef  VIDEO_1280_720
@@ -181,6 +182,7 @@ assign de = video_active_d0;
 assign rgb_r = rgb_r_reg;
 assign rgb_g = rgb_g_reg;
 assign rgb_b = rgb_b_reg;
+assign o_v_cnt = v_cnt;
 always@(posedge clk or posedge rst)
 begin
 	if(rst == 1'b1)
