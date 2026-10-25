@@ -204,8 +204,8 @@ project/src/
 
 - **M1 实际窗口**：`read_finish` 发生在第 479 行末尾（`v_cnt≈524`），下一帧 `vs` 下降沿（`video_read_req`）发生在 `v_cnt=9`（即 `V_FP=10` 行 ≈ `320µs` ≈ `40k` 字/帧），跨帧连续推进，4 槽（1,228,800 字）约 31 帧读完一轮（≈0.52s）；
 - **M2 窗口扩展与排空注意**：
-  1. `color_bar.v` 中 `v_active` 在 `v_cnt==44 && h_cnt==15` 置起，距首个有效像素（`h_cnt≈160`）仅 `5.8µs`，而 A+B 两行 1280 字最少需 `10.24µs`；因此 M2 首行 `y=0` 必须在 **`v_cnt=43`** 提前一整行（~`37.8µs`）开始预取，最后一行 `y=479` 在第 478 行（`v_cnt=523`）内即取完，随后到下一帧 `v_cnt=43` 之间约 44 行（`1.4ms`）全部空闲，轻松跑满 `150k` 字/帧；
-  2. **M2 交接四步链**：**`最后一行取完 → 启动扫描 → 到 v_cnt=43 停止发 en → 排空 12~16 拍（保持 active=1） → 行读取接管`**，防止约 10 拍在途 `Sdr_rd_en` 污染无 `fifo_aclr` 的 BRAM 行缓冲（M2.0 先用 `tb_timing` 打出 `v_cnt/h_cnt/v_active/de` 波形核准延迟）；
+  1. `color_bar.v` 中 `v_active` 在 `v_cnt==44 && h_cnt==15` 置起，但该行有效像素期间 `v_cnt` 已递增为 45；距首个有效像素（`h_cnt≈160`）仅 `5.8µs`，而 A+B 两行 1280 字最少需 `10.24µs`；因此 M2 首行 `y=0` 必须在 **`v_cnt=44`** 提前一整行（~`37.8µs`）开始预取，最后一行 `y=479` 在第 478 行（`v_cnt=523`）内即取完，随后到下一帧 `v_cnt=44` 之间约 44 行（`1.4ms`）全部空闲，轻松跑满 `150k` 字/帧；
+  2. **M2 交接四步链**：**`最后一行取完 → 启动扫描 → 到 v_cnt=44 停止发 en → 排空 12~16 拍（保持 active=1） → 行读取接管`**，防止约 10 拍在途 `Sdr_rd_en` 污染无 `fifo_aclr` 的 BRAM 行缓冲（M2.0 先用 `tb_timing` 打出 `v_cnt/h_cnt/v_active/de` 波形核准延迟）；
 - 读数据不写入 `rfifo`，对显示无任何影响；
 - 实测静止 15 分钟以上切图无噪点。
 
@@ -223,7 +223,7 @@ SDRAM → frame_line_read（每行 640 A + 640 B，计满 1280 个返回）
       → AXIS → HDMI
 ```
 
-- `line_sched`：`v_cnt=43` 预取第 0 行，`44..522` 取第 1..479 行；提前一整行，留约 37.8µs；
+- `line_sched`：`v_cnt=44` 预取第 0 行，`45..523` 取第 1..479 行；提前一整行，留约 37.8µs；
 - `frame_line_read`：A/B 各 640 字连续读，按 `Sdr_rd_en` 返回计数写行缓冲，杜绝行尾串道；
 - `disp_ctrl`：`cur_idx/next_idx` 在 vs 锁存，64 帧（≈1.07s）完成一次转场；K3=0 溶解、1 滑动、2 直切；
 - 后台扫描：最后一行取完后启动，下一帧首行预取前停止；停止后 `sdr_refresh_sweep` 保持 16 拍排空；
@@ -254,10 +254,10 @@ powershell -ExecutionPolicy Bypass -File sim/run_sim.ps1
 | M2 行读取 | `sim/tb_line_read.v` | ✅ 1280 字、A/B 地址与 sel/bank 全对 |
 | M2 混合 | `sim/tb_mixer.v` | ✅ 溶解 0/128/255、滑动 dx=0/320/640 |
 | M2 转场控制 | `sim/tb_disp_ctrl.v` | ✅ 溶解/滑动/直切进度 |
-| M2 行调度 | `sim/tb_line_sched.v` | ✅ 43 预取、480 次 toggle |
+| M2 行调度 | `sim/tb_line_sched.v` | ✅ 44 预取、480 次 toggle |
 | M2 行缓冲 | `sim/tb_line_buffer.v` | ✅ 双时钟 2048 字读写 |
 | M2 视频链路 | `sim/tb_chain.v` | ✅ 480 行/帧、A→B 溶解后输出切换 |
-| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.163ns / Hold WNS +0.004ns，0 失败端点**；LUT 4,212（21.49%）、REG 3,875、BRAM9K 28、DSP 2 |
+| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.508ns / Hold WNS +0.011ns，0 失败端点**；LUT 4,210（21.48%）、REG 3,883、BRAM9K 28、DSP 2 |
 
 ---
 

@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 //=============================================================================
-// tb_line_sched.v — 行调度边界测试（43 预取、44..522 取 1..479）
+// tb_line_sched.v — 行调度边界测试（44 预取、45..523 取 1..479）
 //=============================================================================
 module tb_line_sched;
 
@@ -36,15 +36,15 @@ module tb_line_sched;
             v_cnt = v;
             repeat (2) @(posedge clk);
             #1;
-            if (prefetch_zero !== (v == 43)) begin
+            if (prefetch_zero !== (v == 44)) begin
                 $display("ERR prefetch_zero v=%0d", v); errs = errs + 1;
             end
             if (line_toggle !== tog_d) begin
                 tog_d = line_toggle;
-                if ((v < 43) || (v > 522)) begin
+                if ((v < 44) || (v > 523)) begin
                     $display("ERR toggle at v=%0d", v); errs = errs + 1;
                 end
-                if (line_num !== (v - 43)) begin
+                if (line_num !== (v - 44)) begin
                     $display("ERR line_num v=%0d num=%0d", v, line_num); errs = errs + 1;
                 end
                 count = count + 1;

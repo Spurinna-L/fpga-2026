@@ -180,6 +180,15 @@ module tb_chain;
         end
     end
 
+    // 读写 bank 冲突检查：有效显示期间，写入 bank 不能等于当前显示 bank
+    always @(posedge ext_mem_clk) begin
+        if (lb_we && de_0 && (lb_bank == pix_y[0])) begin
+            if (errs < 5) $display("ERR bank conflict line=%0d bank=%b pix_y=%0d pix_x=%0d vcnt=%0d de=%b",
+                                   line_num, lb_bank, pix_y, pix_x, v_cnt, de_0);
+            errs = errs + 1;
+        end
+    end
+
     initial begin
         repeat (5) @(posedge video_clk);
         rst_vid = 0;
