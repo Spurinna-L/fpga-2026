@@ -1,7 +1,7 @@
 # 主工程源码说明（`project/src/`）
 
-> 本目录是 **M0/M1 唯一主线工程**，由 `legacy/hdmi_test_base/` 全量迁入，并按 `video/ audio/ hdmi/ control/` 归档自研模块。
-> 功能：TF 卡 640×480 BMP → SDRAM 4 槽预载（运行期只读）→ **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
+> 本目录是 **M0/M1/M2 唯一主线工程**，由 `legacy/hdmi_test_base/` 全量迁入，并按 `video/ audio/ hdmi/ control/` 归档自研模块。
+> 功能：TF 卡 640×480 BMP → SDRAM 4 槽预载（运行期只读）→ 按行取 A/B → 行缓冲/溶解/滑动 → **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
 > 官方基线：`lab_ex5_i2s`（APUG092 HDMI 1.4b + SD/）。
 > 模块包含关系图：`../doc/模块层次图.svg`（谁例化了谁）；每个模块的功能/接口见对应 `.v` 顶部注释。
 
@@ -211,6 +211,26 @@ project/src/
 
 > 代价：消隐期占用总线，LUT +89；不影响帧率、加载时间或画面。
 
+### 6.6 M2 行缓冲 + 转场（已实现，待上板）
+
+M2 读路径已从“整帧 FIFO”改为“按行 A/B”：
+
+```
+SDRAM → frame_line_read（每行 640 A + 640 B，计满 1280 个返回）
+      → line_buffer A/B（各 2 bank，640×24 乒乓）
+      → mixer（溶解 / 水平滑动）
+      → video_post（亮度/对比度/OSD 挂载点，当前直通）
+      → AXIS → HDMI
+```
+
+- `line_sched`：`v_cnt=43` 预取第 0 行，`44..522` 取第 1..479 行；提前一整行，留约 37.8µs；
+- `frame_line_read`：A/B 各 640 字连续读，按 `Sdr_rd_en` 返回计数写行缓冲，杜绝行尾串道；
+- `disp_ctrl`：`cur_idx/next_idx` 在 vs 锁存，64 帧（≈1.07s）完成一次转场；K3=0 溶解、1 滑动、2 直切；
+- 后台扫描：最后一行取完后启动，下一帧首行预取前停止；停止后 `sdr_refresh_sweep` 保持 16 拍排空；
+- 当前 bit：`project/out/main_project_m2_mixer.bit`（OSD/亮度仍为直通，队友后续接入 `video_post`）。
+
+> 注意：自动轮播间隔已从 1s 改为 4s（`sd_card_bmp.AUTO_PERIOD_S=4`），否则 1s 转场会连续不断。
+
 
 ---
 
@@ -231,13 +251,19 @@ powershell -ExecutionPolicy Bypass -File sim/run_sim.ps1
 | 音频链路 | `sim/tb_audio.v` | ✅ 20ms 内 `audio_valid≈960`、`acr_valid≈20` |
 | 双读引擎（参考，不综合） | `sim/tb_fb_dual.v` | ✅ 2 帧连读，A/B 各 2048 字、0 错误、0 越界 |
 | 16 键 / 数码管 / 1Hz | `sim/tb_regs.v` | ✅ 参数、转场、OSD、音源、复位、时间戳全通过 |
-| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.174ns / Hold WNS +0.019ns，0 失败端点**；LUT 3,994（20.38%）、REG 3,896、BRAM9K 18、DSP 0 |
+| M2 行读取 | `sim/tb_line_read.v` | ✅ 1280 字、A/B 地址与 sel/bank 全对 |
+| M2 混合 | `sim/tb_mixer.v` | ✅ 溶解 0/128/255、滑动 dx=0/320/640 |
+| M2 转场控制 | `sim/tb_disp_ctrl.v` | ✅ 溶解/滑动/直切进度 |
+| M2 行调度 | `sim/tb_line_sched.v` | ✅ 43 预取、480 次 toggle |
+| M2 行缓冲 | `sim/tb_line_buffer.v` | ✅ 双时钟 2048 字读写 |
+| M2 视频链路 | `sim/tb_chain.v` | ✅ 480 行/帧、A→B 溶解后输出切换 |
+| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.163ns / Hold WNS +0.004ns，0 失败端点**；LUT 4,212（21.49%）、REG 3,875、BRAM9K 28、DSP 2 |
 
 ---
 
 ## 8. 后续演进（M1–M4）
 
 - **M1（已完成并封档，tag `m1-final`；噪点修复 tag `m1-patch`）**：**4 槽预载 + 运行期只读**；顶层只例化 `frame_read_write`（1 写 1 读）；双读源码保留但不参与综合；`video_delay` 双 RGB + `x/y`；`control/regs` 16 键/1Hz/数码管；`sdr_refresh_sweep` 消隐期顺序扫描 4 槽；
-- **M2**：24-bit `transition`（溶解 + 水平滑动）、`video_proc`（亮度/对比度）、`osd_composer`（64 字中文 + 安路 Logo + `MM:SS` + 参数回显）；
+- **M2（行缓冲/转场已实现，待上板）**：`frame_line_read` + 2-bank 行缓冲 + `mixer`（溶解/滑动）+ `disp_ctrl`；亮度/对比度/OSD 留在 `video_post` 由队友接入；
 - **M3**：L2 多谐波/双音伴奏波表合成 `synth_player` + `audio_viz`（声波曲线 + 8 段频谱）；
 - **M4**：`timing.sdc` 最终复测、QSPI 固化、2h 烤机（复位同步/写 FSM 打拍已在 M1 完成）。

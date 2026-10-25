@@ -4,8 +4,9 @@
 // 功能：
 //   上电后自动扫描 TF 卡中的 640×480 / 24bit / 非压缩 BMP，并把前 4 张
 //   **依次预载**到 SDRAM 的 4 个槽位（BUF0..BUF3）；预载完成前不读帧缓存。
-//   运行期只读：25MHz 像素时钟按帧读出，经 21 拍对齐后打包成 AXIS 送
-//   HDMI 1.4b 核；K1/自动轮播只切换槽号，瞬间完成、不写 SDRAM。
+//   运行期只读：M2 改为**按行读取 A/B 两个槽**（frame_line_read），每行
+//   1280 字写入双 bank 行缓冲，经 mixer 做溶解/水平滑动，再送 HDMI；
+//   K1/自动轮播只改槽号，运行期不写 SDRAM。
 //   同时产生 48kHz I2S 测试音，解串成 PCM 并生成 ACR 一起送核。
 //   16 键矩阵键盘负责切图/参数，4 位数码管与 8 个 LED 做状态回显。
 //
@@ -39,9 +40,14 @@
 //   reset_sync ×6                               每域复位同步
 //   keyboard_scan / key_filter                  键盘扫描与消抖
 //   sd_card_bmp                                 SD + FAT32 + BMP + 双缓冲调度
-//   video_timing_data / video_delay             视频时序与 21 拍像素对齐
-//   test_pattern_640x480                        无图时的彩条回退
-//   frame_read_write                            帧缓存（1 写 1 读，当前唯一通路）
+//   video_timing_data / video_pos               视频时序、行计数与像素坐标
+//   line_sched / frame_line_read                提前一行取 A/B
+//   line_buffer ×2 / mixer                      A/B 乒乓行缓冲与溶解/滑动
+//   disp_ctrl                                   当前槽/目标槽/转场进度
+//   video_post                                  亮度/对比度/OSD 挂载点（M2 队友）
+//   test_pattern_640x480                        无图/首行未就绪时的彩条回退
+//   frame_read_write                            帧缓存写侧（仅开机预载）
+//   sdr_refresh_sweep                           消隐期顺序扫描，保持闲置槽
 //   sdram                                       SDRAM 控制器（含加密核）
 //   video_rgb_to_axis_640x480                   RGB/DE/VS → AXIS
 //   hdmi_audio_tone_i2s_64fs / I2S_receiver / audio_arc_calculate
@@ -52,7 +58,7 @@
 //
 // 备注：
 //   - 本板无 DDC/EDID，I_edid_read_trig 恒 0。
-//   - 当前只显示 A 通道（vout_data_raw_a），B 通道数据直接复制 A。
+//   - M2 起 A/B 每行都取；空闲时 next_idx=cur_idx，B 行与 A 行相同。
 //   - 调试用的 SDRAM 自检 / 总线开关已在 M1 封档时移除（源码保留在 SD/sdram_selftest.v）。
 //   - frame_read_write_dual 等双读源码保留在仓库中，但顶层不例化。
 //=============================================================================
@@ -258,60 +264,37 @@ module top(
     );
 
     //-------------------------------------------------------------------------
-    // 视频时序 / 帧缓存读
+    // 视频时序 / 像素坐标 / 行缓冲选择
     //-------------------------------------------------------------------------
     wire        hs_0, vs_0, de_0;
-    wire        video_read_req;
-    wire        video_read_req_ack;
-    wire        video_read_en;
-    wire [31:0] video_read_data_a;
-    wire [31:0] video_read_data_b;
+    wire [11:0] v_cnt;
     wire        hs, vs, de;
-    wire [23:0] vout_data_raw_a;
-    wire [23:0] vout_data_raw_b;
+    wire [23:0] post_rgb;
     wire [23:0] vout_data_raw;
     wire [23:0] vout_data;
     wire [9:0]  pix_x, pix_y;
+    wire        vs_fall;
 
     video_timing_data u_timing (
         .video_clk    (video_clk),
         .rst          (rst_vid),
-        .read_req     (video_read_req),
-        .read_req_ack (video_read_req_ack),
-        .hs           (hs_0),
-        .vs           (vs_0),
-        .de           (de_0)
-    );
-
-    video_delay u_delay (
-        .video_clk    (video_clk),
-        .rst          (rst_vid),
-        .read_en      (video_read_en),
-        .read_data_a  (video_read_data_a[31:8]),
-        .read_data_b  (video_read_data_b[31:8]),
+        .read_req     (),
+        .read_req_ack (1'b0),
         .hs           (hs_0),
         .vs           (vs_0),
         .de           (de_0),
-        .hs_r         (hs),
-        .vs_r         (vs),
-        .de_r         (de),
-        .vout_data_a  (vout_data_raw_a),
-        .vout_data_b  (vout_data_raw_b),
-        .x            (pix_x),
-        .y            (pix_y)
+        .v_cnt        (v_cnt)
     );
 
-    // M1 稳定通路：只显示单读引擎的 A 数据
-    assign vout_data_raw = vout_data_raw_a;
-
-    // 无图时输出彩条（诊断：有彩条=HDMI 链路 OK，问题在 SD/BMP）
-    wire [23:0] test_rgb;
-    test_pattern_640x480 u_test_pattern (
-        .clk (video_clk),
-        .rst (rst_vid),
-        .vs  (vs),
-        .de  (de),
-        .rgb (test_rgb)
+    video_pos u_pos (
+        .clk     (video_clk),
+        .rst     (rst_vid),
+        .vs      (vs_0),
+        .de      (de_0),
+        .x       (pix_x),
+        .y       (pix_y),
+        .vs_d    (),
+        .vs_fall (vs_fall)
     );
 
     // display_valid 来自 100MHz 域，2FF 同步后再参与视频选择
@@ -324,21 +307,116 @@ module top(
     end
     wire display_valid_v = disp_valid_sync[1];
 
-    // 显示源在帧缓存读回之后选择（见下方 fb_read_req / vout_data）
+    // 行读取调度：提前一行发出 line_toggle/line_num
+    wire        line_toggle;
+    wire [9:0]  line_num;
+    wire        prefetch_zero;
+    line_sched u_line_sched (
+        .clk           (video_clk),
+        .rst           (rst_vid),
+        .display_valid (display_valid_v),
+        .v_cnt         (v_cnt),
+        .line_toggle   (line_toggle),
+        .line_num      (line_num),
+        .prefetch_zero (prefetch_zero)
+    );
+
+    // 转场控制（实例放在 regs 之后，见下文）
+    wire [1:0] cur_idx, next_idx, mix_mode;
+    wire [7:0] alpha;
+    wire [9:0] dx;
+    wire       trans_active;
+
+    // 行缓冲写口（来自 frame_line_read）
+    wire        lb_we, lb_bank, lb_sel;
+    wire [9:0]  lb_addr;
+    wire [23:0] lb_data;
+    wire [23:0] lb_a_rdata, lb_b_rdata;
+    wire [9:0]  mix_a_addr, mix_b_addr;
+
+    // 每个图片源一个 2-bank 行缓冲，地址 = {bank, x}
+    line_buffer u_lb_a (
+        .wr_clk  (ext_mem_clk),
+        .wr_en   (lb_we && !lb_sel),
+        .wr_addr ({lb_bank, lb_addr}),
+        .wr_data (lb_data),
+        .rd_clk  (video_clk),
+        .rd_addr ({pix_y[0], mix_a_addr}),
+        .rd_data (lb_a_rdata)
+    );
+
+    line_buffer u_lb_b (
+        .wr_clk  (ext_mem_clk),
+        .wr_en   (lb_we && lb_sel),
+        .wr_addr ({lb_bank, lb_addr}),
+        .wr_data (lb_data),
+        .rd_clk  (video_clk),
+        .rd_addr ({pix_y[0], mix_b_addr}),
+        .rd_data (lb_b_rdata)
+    );
+
+    // A/B 溶解 / 水平滑动
+    wire [23:0] mix_rgb;
+    mixer u_mixer (
+        .clk    (video_clk),
+        .rst    (rst_vid),
+        .x      (pix_x),
+        .mode   (mix_mode),
+        .alpha  (alpha),
+        .dx     (dx),
+        .a_data (lb_a_rdata),
+        .b_data (lb_b_rdata),
+        .a_addr (mix_a_addr),
+        .b_addr (mix_b_addr),
+        .rgb    (mix_rgb)
+    );
+
+    // BRAM 1 拍 + mixer 1 拍，边带整体延迟 2 拍
+    wire [22:0] side_in  = {hs_0, vs_0, de_0, pix_x, pix_y};
+    wire [22:0] side_out;
+    video_delay2 #(.WIDTH(23)) u_side_delay (
+        .clk  (video_clk),
+        .rst  (rst_vid),
+        .din  (side_in),
+        .dout (side_out)
+    );
+
+    wire        post_hs = side_out[22];
+    wire        post_vs = side_out[21];
+    wire        post_de = side_out[20];
+    wire [9:0]  post_x  = side_out[19:10];
+    wire [9:0]  post_y  = side_out[9:0];
+
+    assign hs = post_hs;
+    assign vs = post_vs;
+    assign de = post_de;
+
+    assign vout_data_raw = post_rgb;
+
+    // 无图时输出彩条（诊断：有彩条=HDMI 链路 OK，问题在 SD/BMP）
+    wire [23:0] test_rgb;
+    test_pattern_640x480 u_test_pattern (
+        .clk (video_clk),
+        .rst (rst_vid),
+        .vs  (vs),
+        .de  (de),
+        .rgb (test_rgb)
+    );
+
+    // display_valid 来自 100MHz 域，2FF 同步后再参与视频选择
+    // （disp_valid_sync / display_valid_v 已在视频时序段声明）
+
+    // 显示源在行缓冲输出之后选择（见下方 vout_data）
 
     //-------------------------------------------------------------------------
-    // 帧缓存：M0 原始 1 写 1 读（稳定通路）
-    //   双读实验代码（frame_read_write_dual）保留在源码中但不再例化，
-    //   M2 前会用新架构重新接入。
+    // 帧缓存：写侧仍由 frame_read_write 负责（仅开机预载）
+    //         读侧改为 frame_line_read（按行取 A/B）
     //-------------------------------------------------------------------------
-    // SDRAM 用户接口：帧缓存引擎 + 后台行扫描共用读命令
-    wire        fb_rd_en;
-    wire [20:0] fb_rd_addr;
-    wire        fb_read_finish;
-    wire        fb_sdr_rd_en;
+    wire        line_rd_en;
+    wire [20:0] line_rd_addr;
+    wire        line_busy, line_done, first_line_done, last_line_done;
     wire        sweep_active, sweep_en;
     wire [20:0] sweep_addr;
-    reg  [1:0]  read_req_mem;
 
     wire        App_rd_en;
     wire [20:0] App_rd_addr;
@@ -353,25 +431,62 @@ module top(
     wire        Sdr_init_ref_vld;
     wire        Sdr_busy;
 
-    // disp_buf_idx（100MHz）2FF 到 mem 域，供读地址索引使用
-    reg [1:0] disp_buf_mem;
+    // display_valid / A,B 槽号 2FF 到 mem 域
+    reg [1:0] disp_valid_mem;
+    reg [1:0] cur_idx_mem, next_idx_mem;
+    reg [1:0] prefetch_sync_mem;
     always @(posedge ext_mem_clk or posedge rst_mem) begin
-        if (rst_mem)
-            disp_buf_mem <= 2'd0;
-        else
-            disp_buf_mem <= disp_buf_idx;
+        if (rst_mem) begin
+            disp_valid_mem   <= 2'd0;
+            cur_idx_mem      <= 2'd0;
+            next_idx_mem     <= 2'd0;
+            prefetch_sync_mem <= 2'd0;
+        end else begin
+            disp_valid_mem   <= {disp_valid_mem[0], display_valid};
+            cur_idx_mem      <= cur_idx;
+            next_idx_mem     <= next_idx;
+            prefetch_sync_mem <= {prefetch_sync_mem[0], prefetch_zero};
+        end
     end
 
-    //-------------------------------------------------------------------------
-    // 运行期只读：预载完成（display_valid=1）之后才允许帧缓存读
-    //-------------------------------------------------------------------------
+    function [20:0] slot_base;
+        input [1:0] idx;
+        begin
+            case (idx)
+                2'd0: slot_base = BUF0_ADDR;
+                2'd1: slot_base = BUF1_ADDR;
+                2'd2: slot_base = BUF2_ADDR;
+                default: slot_base = BUF3_ADDR;
+            endcase
+        end
+    endfunction
 
-    wire fb_read_req = video_read_req & disp_valid_sync[1];
+    wire [20:0] base_a = slot_base(cur_idx_mem);
+    wire [20:0] base_b = slot_base(next_idx_mem);
 
-    assign vout_data = display_valid_v ? vout_data_raw : test_rgb;
+    // 首行就绪标志：预载完成后的第一帧先显示彩条，直到第 0 行真正写满
+    reg        frame_ready_mem;
+    always @(posedge ext_mem_clk or posedge rst_mem) begin
+        if (rst_mem)
+            frame_ready_mem <= 1'b0;
+        else if (!disp_valid_mem[1])
+            frame_ready_mem <= 1'b0;
+        else if (first_line_done)
+            frame_ready_mem <= 1'b1;
+    end
+
+    reg [1:0] frame_ready_sync;
+    always @(posedge video_clk or posedge rst_vid) begin
+        if (rst_vid)
+            frame_ready_sync <= 2'b00;
+        else
+            frame_ready_sync <= {frame_ready_sync[0], frame_ready_mem};
+    end
+    wire frame_ready_v = frame_ready_sync[1];
+
 
     //-------------------------------------------------------------------------
-    // 帧缓存：1 写 1 读（4 槽，运行期只读）
+    // 帧缓存写侧：仅开机预载使用；读侧全部交给 frame_line_read
     //-------------------------------------------------------------------------
     frame_read_write #(
         .WRITE_V_FLIP  (1),
@@ -383,22 +498,22 @@ module top(
         .Sdr_init_done    (Sdr_init_done),
         .Sdr_init_ref_vld (Sdr_init_ref_vld),
         .Sdr_busy         (Sdr_busy),
-        .App_rd_en        (fb_rd_en),
-        .App_rd_addr      (fb_rd_addr),
-        .Sdr_rd_en        (fb_sdr_rd_en),
-        .Sdr_rd_dout      (Sdr_rd_dout),
+        .App_rd_en        (),
+        .App_rd_addr      (),
+        .Sdr_rd_en        (1'b0),
+        .Sdr_rd_dout      (32'd0),
         .read_clk         (video_clk),
-        .read_req         (fb_read_req),
-        .read_req_ack     (video_read_req_ack),
-        .read_finish      (fb_read_finish),
+        .read_req         (1'b0),
+        .read_req_ack     (),
+        .read_finish      (),
         .read_addr_0      (BUF0_ADDR),
         .read_addr_1      (BUF1_ADDR),
         .read_addr_2      (BUF2_ADDR),
         .read_addr_3      (BUF3_ADDR),
-        .read_addr_index  (disp_buf_mem),
+        .read_addr_index  (2'd0),
         .read_len         (FRAME_PIXELS),
-        .read_en          (video_read_en),
-        .read_data        (video_read_data_a),
+        .read_en          (1'b0),
+        .read_data        (),
         .App_wr_en        (App_wr_en),
         .App_wr_addr      (App_wr_addr),
         .App_wr_din       (App_wr_din),
@@ -418,33 +533,52 @@ module top(
     );
 
     //-------------------------------------------------------------------------
-    // 后台顺序扫描：每帧读完后、下一 vs 前，顺序读 4 个图片槽的地址空间
-    //   —— 实测只有“顺序整段读”能保持闲置槽数据（点读/自动刷新都不够）
+    // 行读取：每行取 A 640 字 + B 640 字，写入 2-bank 行缓冲
     //-------------------------------------------------------------------------
-    // video_read_req 同步到 ext_mem_clk，作为扫描的停止条件（下一帧读开始）
-    always @(posedge ext_mem_clk or posedge rst_mem) begin
-        if (rst_mem)
-            read_req_mem <= 2'b00;
-        else
-            read_req_mem <= {read_req_mem[0], video_read_req};
-    end
+    frame_line_read u_line_read (
+        .clk            (ext_mem_clk),
+        .rst            (rst_mem),
+        .enable         (disp_valid_mem[1]),
+        .Sdr_init_done  (Sdr_init_done),
+        .sweep_busy     (sweep_active),
+        .base_a         (base_a),
+        .base_b         (base_b),
+        .line_toggle    (line_toggle),
+        .line_num       (line_num),
+        .line_busy      (line_busy),
+        .line_done      (line_done),
+        .first_line_done(first_line_done),
+        .last_line_done (last_line_done),
+        .App_rd_en      (line_rd_en),
+        .App_rd_addr    (line_rd_addr),
+        .Sdr_busy       (Sdr_busy),
+        .Sdr_rd_en      (Sdr_rd_en),
+        .Sdr_rd_dout    (Sdr_rd_dout),
+        .lb_we          (lb_we),
+        .lb_bank        (lb_bank),
+        .lb_addr        (lb_addr),
+        .lb_data        (lb_data),
+        .lb_sel         (lb_sel)
+    );
 
+    //-------------------------------------------------------------------------
+    // 后台顺序扫描：最后一行取完后开始，下一帧首行预取前停止
+    //   —— 只有“顺序整段读”能保持闲置槽数据（点读/自动刷新都不够）
+    //-------------------------------------------------------------------------
     sdr_refresh_sweep u_sweep (
         .clk    (ext_mem_clk),
         .rst    (rst_mem),
-        .start  (fb_read_finish),
-        .stop   (read_req_mem[1]),
+        .start  (last_line_done),
+        .stop   (prefetch_sync_mem[1]),
         .active (sweep_active),
         .en     (sweep_en),
         .addr   (sweep_addr)
     );
 
-    assign App_rd_en   = sweep_active ? sweep_en   : fb_rd_en;
-    assign App_rd_addr = sweep_active ? sweep_addr : fb_rd_addr;
-    // 扫描期间的读数据不写帧缓存 FIFO（窗口末的残余会在下帧 S_ACK 清掉）
-    assign fb_sdr_rd_en = sweep_active ? 1'b0 : Sdr_rd_en;
+    assign App_rd_en   = sweep_active ? sweep_en   : line_rd_en;
+    assign App_rd_addr = sweep_active ? sweep_addr : line_rd_addr;
 
-    assign video_read_data_b = video_read_data_a;
+    assign vout_data = (display_valid_v && frame_ready_v) ? vout_data_raw : test_rgb;
 
     sdram u_sdram (
         .Clk              (ext_mem_clk),
@@ -637,6 +771,52 @@ module top(
         .tick_1hz     (regs_tick_1hz),
         .seg_value    (regs_seg_value),
         .key_press    (regs_key_press)
+    );
+
+    //-------------------------------------------------------------------------
+    // 显示槽 A/B 与转场控制（video_clk 域）
+    //-------------------------------------------------------------------------
+    disp_ctrl u_disp_ctrl (
+        .clk           (video_clk),
+        .rst           (rst_vid),
+        .display_valid (display_valid_v),
+        .disp_idx_in   (disp_buf_idx),
+        .trans_mode_in (regs_trans_mode),
+        .frame_tick    (vs_fall),
+        .cur_idx       (cur_idx),
+        .next_idx      (next_idx),
+        .mix_mode      (mix_mode),
+        .alpha         (alpha),
+        .dx            (dx),
+        .trans_active  (trans_active)
+    );
+
+    //-------------------------------------------------------------------------
+    // mixer 之后的视频后处理（亮度/对比度/OSD 由队友填充）
+    //-------------------------------------------------------------------------
+    video_post u_video_post (
+        .clk        (video_clk),
+        .rst        (rst_vid),
+        .rgb_in     (mix_rgb),
+        .hs_in      (post_hs),
+        .vs_in      (post_vs),
+        .de_in      (post_de),
+        .x_in       (post_x),
+        .y_in       (post_y),
+        .brightness (regs_brightness),
+        .contrast   (regs_contrast),
+        .osd_en     (regs_osd_en),
+        .time_mm    (regs_time_mm),
+        .time_ss    (regs_time_ss),
+        .img_idx    (img_idx),
+        .trans_mode (regs_trans_mode),
+        .audio_src  (regs_audio_src),
+        .rgb_out    (post_rgb),
+        .hs_out     (),
+        .vs_out     (),
+        .de_out     (),
+        .x_out      (),
+        .y_out      ()
     );
 
     //-------------------------------------------------------------------------
