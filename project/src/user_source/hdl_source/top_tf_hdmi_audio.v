@@ -334,12 +334,63 @@ module top(
     wire [23:0] lb_a_rdata, lb_b_rdata;
     wire [9:0]  mix_a_addr, mix_b_addr;
 
+    //-------------------------------------------------------------------------
+    // 临时诊断模式（K13 循环：0=正常 SDRAM 图，1=行缓冲自写渐变，2=行地址写渐变）
+    //   LED4/LED5 显示 diag_mode，便于确认当前模式。
+    //   模式 1/2 仅用于定位撕裂，最终版本会删除。
+    //-------------------------------------------------------------------------
+    reg [1:0] diag_mode;
+    reg       key13_d;
+    always @(posedge clk or negedge rst_n_sys) begin
+        if (!rst_n_sys) begin
+            diag_mode <= 2'd0;
+            key13_d   <= 1'b0;
+        end else begin
+            key13_d <= key_deb[12];
+            if (key_deb[12] && !key13_d)
+                diag_mode <= (diag_mode == 2'd2) ? 2'd0 : (diag_mode + 2'd1);
+        end
+    end
+
+    reg [1:0] diag_mode_m0, diag_mode_m1;
+    reg [10:0] diag_cnt;
+    always @(posedge ext_mem_clk or posedge rst_mem) begin
+        if (rst_mem) begin
+            diag_mode_m0 <= 2'd0;
+            diag_mode_m1 <= 2'd0;
+            diag_cnt     <= 11'd0;
+        end else begin
+            diag_mode_m0 <= diag_mode;
+            diag_mode_m1 <= diag_mode_m0;
+            diag_cnt     <= diag_cnt + 11'd1;
+        end
+    end
+
+    function [23:0] diag_pat;
+        input [10:0] a;
+        begin
+            if (a[5:0] == 6'd0)
+                diag_pat = 24'hFFFFFF;
+            else
+                diag_pat = {a[9:2], a[1:0], 6'b0, 7'b0, a[10]};
+        end
+    endfunction
+
+    wire [10:0] lb_a_waddr = (diag_mode_m1 == 2'd1) ? diag_cnt : {lb_bank, lb_addr};
+    wire [10:0] lb_b_waddr = (diag_mode_m1 == 2'd1) ? diag_cnt : {lb_bank, lb_addr};
+    wire [23:0] lb_a_wdata = (diag_mode_m1 == 2'd1) ? diag_pat(diag_cnt) :
+                             (diag_mode_m1 == 2'd2) ? diag_pat({lb_bank, lb_addr}) : lb_data;
+    wire [23:0] lb_b_wdata = (diag_mode_m1 == 2'd1) ? diag_pat(diag_cnt) :
+                             (diag_mode_m1 == 2'd2) ? diag_pat({lb_bank, lb_addr}) : lb_data;
+    wire        lb_a_we    = (diag_mode_m1 == 2'd1) ? 1'b1 : (lb_we && !lb_sel);
+    wire        lb_b_we    = (diag_mode_m1 == 2'd1) ? 1'b1 : (lb_we &&  lb_sel);
+
     // 每个图片源一个 2-bank 行缓冲，地址 = {bank, x}
     line_buffer u_lb_a (
         .wr_clk  (ext_mem_clk),
-        .wr_en   (lb_we && !lb_sel),
-        .wr_addr ({lb_bank, lb_addr}),
-        .wr_data (lb_data),
+        .wr_en   (lb_a_we),
+        .wr_addr (lb_a_waddr),
+        .wr_data (lb_a_wdata),
         .rd_clk  (video_clk),
         .rd_addr ({pix_y[0], mix_a_addr}),
         .rd_data (lb_a_rdata)
@@ -347,9 +398,9 @@ module top(
 
     line_buffer u_lb_b (
         .wr_clk  (ext_mem_clk),
-        .wr_en   (lb_we && lb_sel),
-        .wr_addr ({lb_bank, lb_addr}),
-        .wr_data (lb_data),
+        .wr_en   (lb_b_we),
+        .wr_addr (lb_b_waddr),
+        .wr_data (lb_b_wdata),
         .rd_clk  (video_clk),
         .rd_addr ({pix_y[0], mix_b_addr}),
         .rd_data (lb_b_rdata)
@@ -483,7 +534,6 @@ module top(
             frame_ready_sync <= {frame_ready_sync[0], frame_ready_mem};
     end
     wire frame_ready_v = frame_ready_sync[1];
-
 
     //-------------------------------------------------------------------------
     // 帧缓存写侧：仅开机预载使用；读侧全部交给 frame_line_read
@@ -844,8 +894,8 @@ module top(
     assign led[1] = Sdr_init_done;
     assign led[2] = display_valid;
     assign led[3] = disp_buf_idx[0];
-    assign led[4] = 1'b0;
-    assign led[5] = 1'b0;
+    assign led[4] = diag_mode[0];
+    assign led[5] = diag_mode[1];
     assign led[6] = video_locked;
     assign led[7] = led_heart;           // 1Hz 心跳
 

@@ -153,7 +153,7 @@ module frame_line_read #(
                 end
 
                 S_ISSUE: begin
-                    if (!Sdr_busy && (issue_cnt < WORDS_TOTAL))
+                    if (issue_cnt < WORDS_TOTAL)
                         issue_cnt <= issue_cnt + 11'd1;
 
                     if (issue_cnt == WORDS_TOTAL)
@@ -177,12 +177,13 @@ module frame_line_read #(
         end
     end
 
-    // App_rd_en / addr 同拍寄存；Sdr_busy 时暂停发命令
+    // App_rd_en / addr 同拍寄存；与 M1 的 frame_fifo_read 一样，读命令连续发出，
+    // 不因 Sdr_busy 中断，避免一条 1280 字的行被拆成不连续的小段。
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             App_rd_en   <= 1'b0;
             App_rd_addr <= 21'd0;
-        end else if ((state == S_ISSUE) && (issue_cnt < WORDS_TOTAL) && !Sdr_busy) begin
+        end else if ((state == S_ISSUE) && (issue_cnt < WORDS_TOTAL)) begin
             App_rd_en   <= 1'b1;
             App_rd_addr <= cur_addr;
         end else begin
