@@ -70,12 +70,14 @@ Write-Host "=== M2 line scheduler ==="
 Write-Host "=== M2 line buffer (dual clock) ==="
 & $iv -g2012 -s tb_line_buffer -o "$here\tb_line_buffer.out" `
     "$here\tb_line_buffer.v" `
+    "$here\base_stubs.v" `
     "$h\video\line_buffer.v"
 & $vvp "$here\tb_line_buffer.out"
 
 Write-Host "=== M2 video chain (line read + buffer + mixer) ==="
 & $iv -g2012 -s tb_chain -I "$h\SD" -o "$here\tb_chain.out" `
     "$here\tb_chain.v" `
+    "$here\base_stubs.v" `
     "$h\SD\video_timing_data.v" `
     "$h\SD\color_bar.v" `
     "$h\video\video_pos.v" `

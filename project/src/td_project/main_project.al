@@ -278,70 +278,6 @@
                     <Attr Name="CompileOrder" Val="38"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/video/video_delay2.v">
-                <FileInfo>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
-                    <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="46"/>
-                </FileInfo>
-            </File>
-            <File Path="../user_source/hdl_source/video/video_pos.v">
-                <FileInfo>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
-                    <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="47"/>
-                </FileInfo>
-            </File>
-            <File Path="../user_source/hdl_source/video/line_buffer.v">
-                <FileInfo>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
-                    <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="48"/>
-                </FileInfo>
-            </File>
-            <File Path="../user_source/hdl_source/video/line_sched.v">
-                <FileInfo>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
-                    <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="49"/>
-                </FileInfo>
-            </File>
-            <File Path="../user_source/hdl_source/video/frame_line_read.v">
-                <FileInfo>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
-                    <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="50"/>
-                </FileInfo>
-            </File>
-            <File Path="../user_source/hdl_source/video/disp_ctrl.v">
-                <FileInfo>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
-                    <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="51"/>
-                </FileInfo>
-            </File>
-            <File Path="../user_source/hdl_source/video/mixer.v">
-                <FileInfo>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
-                    <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="52"/>
-                </FileInfo>
-            </File>
-            <File Path="../user_source/hdl_source/video/video_post.v">
-                <FileInfo>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
-                    <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="53"/>
-                </FileInfo>
-            </File>
             <File Path="../user_source/hdl_source/SD/frame_fifo_read_arb.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
@@ -400,6 +336,79 @@
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="45"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/SD/sdram_selftest.v">
+                <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="46"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/disp_ctrl.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="47"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/frame_line_read.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="48"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/line_buffer.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="49"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/line_sched.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="50"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/mixer.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="51"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/video_delay2.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="52"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/video_pos.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="53"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/video_post.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="54"/>
                 </FileInfo>
             </File>
         </Verilog>

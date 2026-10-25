@@ -1,16 +1,15 @@
 `timescale 1ns/1ps
 //=============================================================================
-// line_buffer.v — 双时钟行缓冲（每个图片源 2 个 bank）
+// line_buffer.v — 双时钟行缓冲（显式 EG_LOGIC_BRAM，PDPW 模式）
 //-----------------------------------------------------------------------------
+// 为什么不用推断 RAM：
+//   TD 对“两个 always 块 + 两个时钟”的推断 RAM 行为不够确定；这里直接用
+//   官方 IP 生成器同款 EG_LOGIC_BRAM（PDPW：A 口写、B 口读），行为与
+//   Camera/LCD 例程一致，读延迟固定 1 拍。
+//
 // 写侧：125MHz，frame_line_read 把一行 640 个像素写到 bank = line_y[0]；
 // 读侧：25MHz，显示当前行，bank = pix_y[0]；
 // 地址 = {bank, x[9:0]}，深度 2048，正好覆盖 2×1024。
-//
-// 乒乓关系：
-//   显示第 y 行时读 bank=y[0]；同时行读取在写第 y+1 行，bank=(y+1)[0]，
-//   两个 bank 不同，因此不会读写冲突。
-//
-// 复位：BRAM 内容不复位；显示有效性由顶层 display_valid 控制。
 //=============================================================================
 module line_buffer #(
     parameter WIDTH      = 24,
@@ -25,18 +24,44 @@ module line_buffer #(
     // 读侧：25MHz
     input  wire                  rd_clk,
     input  wire [ADDR_BITS-1:0]  rd_addr,
-    output reg  [WIDTH-1:0]      rd_data
+    output wire [WIDTH-1:0]      rd_data
 );
 
-    reg [WIDTH-1:0] mem [0:(1<<ADDR_BITS)-1];
-
-    always @(posedge wr_clk) begin
-        if (wr_en)
-            mem[wr_addr] <= wr_data;
-    end
-
-    always @(posedge rd_clk) begin
-        rd_data <= mem[rd_addr];
-    end
+    EG_LOGIC_BRAM #(
+        .DATA_WIDTH_A  (WIDTH),
+        .DATA_WIDTH_B  (WIDTH),
+        .ADDR_WIDTH_A  (ADDR_BITS),
+        .ADDR_WIDTH_B  (ADDR_BITS),
+        .DATA_DEPTH_A  (1 << ADDR_BITS),
+        .DATA_DEPTH_B  (1 << ADDR_BITS),
+        .MODE          ("PDPW"),
+        .REGMODE_A     ("NOREG"),
+        .REGMODE_B     ("NOREG"),
+        .WRITEMODE_A   ("NORMAL"),
+        .WRITEMODE_B   ("NORMAL"),
+        .RESETMODE     ("SYNC"),
+        .IMPLEMENT     ("9K"),
+        .INIT_FILE     ("NONE"),
+        .FILL_ALL      ("NONE")
+    ) u_ram (
+        .dia   (wr_data),
+        .dib   ({WIDTH{1'b0}}),
+        .addra (wr_addr),
+        .addrb (rd_addr),
+        .cea   (wr_en),
+        .ceb   (1'b1),
+        .ocea  (1'b0),
+        .oceb  (1'b0),
+        .clka  (wr_clk),
+        .clkb  (rd_clk),
+        .wea   (1'b1),
+        .web   (1'b0),
+        .bea   (1'b0),
+        .beb   (1'b0),
+        .rsta  (1'b0),
+        .rstb  (1'b0),
+        .doa   (),
+        .dob   (rd_data)
+    );
 
 endmodule
