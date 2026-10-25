@@ -211,7 +211,7 @@ project/src/
 
 > 代价：消隐期占用总线，LUT +89；不影响帧率、加载时间或画面。
 
-### 6.6 M2 行缓冲 + 转场（已实现，待上板）
+### 6.6 M2 行缓冲 + 转场（已上板验证）
 
 M2 读路径已从“整帧 FIFO”改为“按行 A/B”：
 
@@ -228,6 +228,8 @@ SDRAM → frame_line_read（每行 640 A + 640 B，计满 1280 个返回）
 - `disp_ctrl`：`cur_idx/next_idx` 在 vs 锁存，64 帧（≈1.07s）完成一次转场；K3=0 溶解、1 滑动、2 直切；
 - 后台扫描：最后一行取完后启动，下一帧首行预取前停止；停止后 `sdr_refresh_sweep` 保持 16 拍排空；
 - 当前 bit：`project/out/main_project_m2_mixer.bit`（OSD/亮度仍为直通，队友后续接入 `video_post`）。
+
+> **上板踩坑**：`frame_line_read` 最初在 `Sdr_busy` 时暂停发命令，一行 1280 字被拆成不连续小段，控制器返回节奏变化导致行内像素错位（纵向梳齿/短横虚线）。改为连续发完整 1280 个读命令后修复；与 M1 `frame_fifo_read` 的做法一致。
 
 > 注意：自动轮播间隔已从 1s 改为 4s（`sd_card_bmp.AUTO_PERIOD_S=4`），否则 1s 转场会连续不断。
 
@@ -257,13 +259,13 @@ powershell -ExecutionPolicy Bypass -File sim/run_sim.ps1
 | M2 行调度 | `sim/tb_line_sched.v` | ✅ 44 预取、480 次 toggle |
 | M2 行缓冲 | `sim/tb_line_buffer.v` | ✅ 双时钟 2048 字读写 |
 | M2 视频链路 | `sim/tb_chain.v` | ✅ 480 行/帧、A→B 溶解后输出切换 |
-| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.508ns / Hold WNS +0.011ns，0 失败端点**；LUT 4,210（21.48%）、REG 3,883、BRAM9K 28、DSP 2 |
+| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.544ns / Hold WNS +0.003ns，0 失败端点**；LUT 4,216（21.51%）、REG 3,873、BRAM9K 28、DSP 2 |
 
 ---
 
 ## 8. 后续演进（M1–M4）
 
 - **M1（已完成并封档，tag `m1-final`；噪点修复 tag `m1-patch`）**：**4 槽预载 + 运行期只读**；顶层只例化 `frame_read_write`（1 写 1 读）；双读源码保留但不参与综合；`video_delay` 双 RGB + `x/y`；`control/regs` 16 键/1Hz/数码管；`sdr_refresh_sweep` 消隐期顺序扫描 4 槽；
-- **M2（行缓冲/转场已实现，待上板）**：`frame_line_read` + 2-bank 行缓冲 + `mixer`（溶解/滑动）+ `disp_ctrl`；亮度/对比度/OSD 留在 `video_post` 由队友接入；
+- **M2（行缓冲/转场已上板验证）**：`frame_line_read` + 2-bank 行缓冲 + `mixer`（溶解/滑动）+ `disp_ctrl`；亮度/对比度/OSD 留在 `video_post` 由队友接入；
 - **M3**：L2 多谐波/双音伴奏波表合成 `synth_player` + `audio_viz`（声波曲线 + 8 段频谱）；
 - **M4**：`timing.sdc` 最终复测、QSPI 固化、2h 烤机（复位同步/写 FSM 打拍已在 M1 完成）。
