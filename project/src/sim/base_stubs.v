@@ -1,7 +1,21 @@
 //=============================================================================
-// base_stubs.v — 仅用于 iverilog 语法检查（不参与 TD 综合）
+// base_stubs.v — 仅用于 iverilog / ModelSim 语法检查与仿真
 // 为 PLL / SDRAM IP / HDMI 加密核 / FIFO IP / ODDR 原语提供空壳
+//
+// !!! 重要 !!!
+// 本文件里的 module 名与真实 IP 生成的文件完全相同（sys_pll / video_pll /
+// PLL_HDMI_AUDIO / wfifo_32_32_512 / rfifo_32_32_512 ...）。如果它被 TD 当作
+// 普通源文件一起综合，且 CompileOrder 排在真实 IP 之后，TD 会报：
+//     HDL-7201 CRITICAL-WARNING: overwrite current module 'sys_pll'
+// 结果真实 PLL 被空壳替换 → 一个时钟都不产生 → HDMI 全黑屏。
+//
+// 因此本文件必须定义 `SIM_STUBS 宏才生效：
+//   iverilog :  -D SIM_STUBS
+//   ModelSim :  +define+SIM_STUBS
+// TD 综合时不定义该宏，本文件内容自动为空，不会产生同名模块。
 //=============================================================================
+
+`ifdef SIM_STUBS
 `timescale 1ns / 1ps
 
 // ---- PLL ----
@@ -217,3 +231,5 @@ module EG_LOGIC_BRAM #(
     assign doa = {DATA_WIDTH_A{1'b0}};
     assign dob = dob_r;
 endmodule
+
+`endif // SIM_STUBS

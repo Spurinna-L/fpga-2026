@@ -59,7 +59,7 @@ $files = @(
     "$here\base_stubs.v"
 )
 
-& $iverilog -g2012 -s top -o "$here\base_syntax.out" -I "$h\SD" @files
+& $iverilog -g2012 -D SIM_STUBS -s top -o "$here\base_syntax.out" -I "$h\SD" @files
 if ($LASTEXITCODE -eq 0) {
     Write-Host "SYNTAX OK"
 } else {
