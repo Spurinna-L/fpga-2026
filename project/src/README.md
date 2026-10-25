@@ -1,7 +1,7 @@
 # 主工程源码说明（`project/src/`）
 
 > 本目录是 **M0/M1 唯一主线工程**，由 `legacy/hdmi_test_base/` 全量迁入，并按 `video/ audio/ hdmi/ control/` 归档自研模块。
-> 功能：TF 卡 640×480 BMP → SDRAM 双缓冲 → **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
+> 功能：TF 卡 640×480 BMP → SDRAM 4 槽预载（运行期只读）→ **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
 > 官方基线：`lab_ex5_i2s`（APUG092 HDMI 1.4b + SD/）。
 > 模块包含关系图：`../doc/模块层次图.svg`（谁例化了谁）；每个模块的功能/接口见对应 `.v` 顶部注释。
 
@@ -32,7 +32,7 @@ project/src/
 ├── user_source/
 │   ├── hdl_source/
 │   │   ├── top_tf_hdmi_audio.v    # 顶层
-│   │   ├── SD/                    # SD/BMP + frame_read_write_dual / frame_fifo_read_arb / rd_arbiter + sdram
+│   │   ├── SD/                    # SD/BMP + frame_read_write + sdr_refresh_sweep + sdram（含未综合的双读实验源码）
 │   │   ├── include/               # global_def.v + sdr_as_ram / sdr_init_ref / sdr_wrrd 加密核（位置固定）
 │   │   ├── video/                 # test_pattern / video_rgb_to_axis（M2 增 transition/video_proc/osd）
 │   │   ├── audio/                 # L1 测试音 / I2S_receiver / ACR（M3 增 synth_player/audio_viz）
@@ -102,8 +102,8 @@ project/src/
   - `led[1]` SDRAM 初始化完成
   - `led[2]` 首图已显示（4 槽预载完成）
   - `led[3]` 当前显示槽号最低位
-  - `led[4]` 恒 0
-  - `led[5]` 当前写入槽号最低位（预载完成后固定）
+  - `led[4]` 恒 0（预留）
+  - `led[5]` 恒 0（预留）
   - `led[6]` HDMI 视频锁定
   - `led[7]` 1Hz 心跳（0.5s 翻转）
 
@@ -188,7 +188,29 @@ project/src/
 - K1 / 自动轮播只改 `disp_buf_idx`，读引擎在下一帧边界换基地址 → **平滑、无撕裂、无加载提示**；
 - 预载期间 `display_valid=0`，`fb_read_req` 被门控，保证“写的时候绝不在读”。
 
-> M2 的双读/转场必须遵守同一原则：**运行期只读**。转场时读两个槽（A/B），正好复用这个 4 槽结构。
+> M2 的 A/B 转场必须遵守同一原则：**运行期只读**。转场时读两个槽（A/B），正好复用这个 4 槽结构。
+
+### 6.5 闲置槽噪点与后台顺序扫描（M1 补丁）
+
+**现象**：刚上电四张都干净；同一张图静止若干分钟后，切到其它槽会出现稀疏、固定位置的单像素噪点（彩色小点，密度随闲置时间增加）。
+
+**定位结论**：
+
+1. 正在显示的槽**始终干净**——它每帧被顺序读满 307200 字；
+2. 闲置槽靠控制器自动刷新，但实测**保持不住**；把 `SELF_REFRESH_INTERVAL` 提高 4 倍、单独关闭控制器自刷新，都未能消除；
+3. 按 128 字步长“点读”整片 SDRAM **完全无效**；说明这颗硬核只把“**顺序整段读**”当作有效访问。
+
+**解决**：`sdr_refresh_sweep` 在每帧消隐期（`read_finish` 之后、下一个 `vs` 之前）顺序读 4 个槽的地址空间：
+
+- **M1 实际窗口**：`read_finish` 发生在第 479 行末尾（`v_cnt≈524`），下一帧 `vs` 下降沿（`video_read_req`）发生在 `v_cnt=9`（即 `V_FP=10` 行 ≈ `320µs` ≈ `40k` 字/帧），跨帧连续推进，4 槽（1,228,800 字）约 31 帧读完一轮（≈0.52s）；
+- **M2 窗口扩展与排空注意**：
+  1. `color_bar.v` 中 `v_active` 在 `v_cnt==44 && h_cnt==15` 置起，距首个有效像素（`h_cnt≈160`）仅 `5.8µs`，而 A+B 两行 1280 字最少需 `10.24µs`；因此 M2 首行 `y=0` 必须在 **`v_cnt=43`** 提前一整行（~`37.8µs`）开始预取，最后一行 `y=479` 在第 478 行（`v_cnt=523`）内即取完，随后到下一帧 `v_cnt=43` 之间约 44 行（`1.4ms`）全部空闲，轻松跑满 `150k` 字/帧；
+  2. **M2 交接四步链**：**`最后一行取完 → 启动扫描 → 到 v_cnt=43 停止发 en → 排空 12~16 拍（保持 active=1） → 行读取接管`**，防止约 10 拍在途 `Sdr_rd_en` 污染无 `fifo_aclr` 的 BRAM 行缓冲（M2.0 先用 `tb_timing` 打出 `v_cnt/h_cnt/v_active/de` 波形核准延迟）；
+- 读数据不写入 `rfifo`，对显示无任何影响；
+- 实测静止 15 分钟以上切图无噪点。
+
+> 代价：消隐期占用总线，LUT +89；不影响帧率、加载时间或画面。
+
 
 ---
 
@@ -209,13 +231,13 @@ powershell -ExecutionPolicy Bypass -File sim/run_sim.ps1
 | 音频链路 | `sim/tb_audio.v` | ✅ 20ms 内 `audio_valid≈960`、`acr_valid≈20` |
 | 双读引擎（参考，不综合） | `sim/tb_fb_dual.v` | ✅ 2 帧连读，A/B 各 2048 字、0 错误、0 越界 |
 | 16 键 / 数码管 / 1Hz | `sim/tb_regs.v` | ✅ 参数、转场、OSD、音源、复位、时间戳全通过 |
-| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.289ns / Hold WNS +0.011ns，0 失败端点**；LUT 3,905（19.92%）、REG 3,833、BRAM9K 18、DSP 0 |
+| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.174ns / Hold WNS +0.019ns，0 失败端点**；LUT 3,994（20.38%）、REG 3,896、BRAM9K 18、DSP 0 |
 
 ---
 
 ## 8. 后续演进（M1–M4）
 
-- **M1（已完成并封档，tag `m1-final`）**：**4 槽预载 + 运行期只读**；顶层只例化 `frame_read_write`（1 写 1 读）；双读源码保留但不参与综合；`video_delay` 双 RGB + `x/y`；`control/regs` 16 键/1Hz/数码管；
+- **M1（已完成并封档，tag `m1-final`；噪点修复 tag `m1-patch`）**：**4 槽预载 + 运行期只读**；顶层只例化 `frame_read_write`（1 写 1 读）；双读源码保留但不参与综合；`video_delay` 双 RGB + `x/y`；`control/regs` 16 键/1Hz/数码管；`sdr_refresh_sweep` 消隐期顺序扫描 4 槽；
 - **M2**：24-bit `transition`（溶解 + 水平滑动）、`video_proc`（亮度/对比度）、`osd_composer`（64 字中文 + 安路 Logo + `MM:SS` + 参数回显）；
 - **M3**：L2 多谐波/双音伴奏波表合成 `synth_player` + `audio_viz`（声波曲线 + 8 段频谱）；
 - **M4**：`timing.sdc` 最终复测、QSPI 固化、2h 烤机（复位同步/写 FSM 打拍已在 M1 完成）。

@@ -331,7 +331,15 @@ module top(
     //   双读实验代码（frame_read_write_dual）保留在源码中但不再例化，
     //   M2 前会用新架构重新接入。
     //-------------------------------------------------------------------------
-    // SDRAM 用户接口（帧缓存引擎唯一驱动）
+    // SDRAM 用户接口：帧缓存引擎 + 后台行扫描共用读命令
+    wire        fb_rd_en;
+    wire [20:0] fb_rd_addr;
+    wire        fb_read_finish;
+    wire        fb_sdr_rd_en;
+    wire        sweep_active, sweep_en;
+    wire [20:0] sweep_addr;
+    reg  [1:0]  read_req_mem;
+
     wire        App_rd_en;
     wire [20:0] App_rd_addr;
     wire        App_wr_en;
@@ -375,14 +383,14 @@ module top(
         .Sdr_init_done    (Sdr_init_done),
         .Sdr_init_ref_vld (Sdr_init_ref_vld),
         .Sdr_busy         (Sdr_busy),
-        .App_rd_en        (App_rd_en),
-        .App_rd_addr      (App_rd_addr),
-        .Sdr_rd_en        (Sdr_rd_en),
+        .App_rd_en        (fb_rd_en),
+        .App_rd_addr      (fb_rd_addr),
+        .Sdr_rd_en        (fb_sdr_rd_en),
         .Sdr_rd_dout      (Sdr_rd_dout),
         .read_clk         (video_clk),
         .read_req         (fb_read_req),
         .read_req_ack     (video_read_req_ack),
-        .read_finish      (),
+        .read_finish      (fb_read_finish),
         .read_addr_0      (BUF0_ADDR),
         .read_addr_1      (BUF1_ADDR),
         .read_addr_2      (BUF2_ADDR),
@@ -408,6 +416,33 @@ module top(
         .write_en         (sd_write_en),
         .write_data       (sd_write_data)
     );
+
+    //-------------------------------------------------------------------------
+    // 后台顺序扫描：每帧读完后、下一 vs 前，顺序读 4 个图片槽的地址空间
+    //   —— 实测只有“顺序整段读”能保持闲置槽数据（点读/自动刷新都不够）
+    //-------------------------------------------------------------------------
+    // video_read_req 同步到 ext_mem_clk，作为扫描的停止条件（下一帧读开始）
+    always @(posedge ext_mem_clk or posedge rst_mem) begin
+        if (rst_mem)
+            read_req_mem <= 2'b00;
+        else
+            read_req_mem <= {read_req_mem[0], video_read_req};
+    end
+
+    sdr_refresh_sweep u_sweep (
+        .clk    (ext_mem_clk),
+        .rst    (rst_mem),
+        .start  (fb_read_finish),
+        .stop   (read_req_mem[1]),
+        .active (sweep_active),
+        .en     (sweep_en),
+        .addr   (sweep_addr)
+    );
+
+    assign App_rd_en   = sweep_active ? sweep_en   : fb_rd_en;
+    assign App_rd_addr = sweep_active ? sweep_addr : fb_rd_addr;
+    // 扫描期间的读数据不写帧缓存 FIFO（窗口末的残余会在下帧 S_ACK 清掉）
+    assign fb_sdr_rd_en = sweep_active ? 1'b0 : Sdr_rd_en;
 
     assign video_read_data_b = video_read_data_a;
 
@@ -630,7 +665,7 @@ module top(
     assign led[2] = display_valid;
     assign led[3] = disp_buf_idx[0];
     assign led[4] = 1'b0;
-    assign led[5] = write_buf_idx[0];
+    assign led[5] = 1'b0;
     assign led[6] = video_locked;
     assign led[7] = led_heart;           // 1Hz 心跳
 

@@ -43,6 +43,7 @@ $files = @(
     "$h\SD\sd_card_top.v",
     "$h\SD\spi_master.v",
     "$h\SD\sdram_selftest.v",
+    "$h\SD\sdr_refresh_sweep.v",
     "$here\base_stubs.v"
 )
 

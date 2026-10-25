@@ -82,7 +82,10 @@ wire  [`DATA_WIDTH-1:0]	SDR_DQ ;
 wire  [`DM_WIDTH-1:0]	SDR_DM; 
 `endif
 
-sdr_as_ram  #( .self_refresh_open(1'b1))
+// self_refresh_open=0：关闭控制器的空闲自刷新（低功耗）状态。
+//   数据保持改由 sdr_refresh_sweep 在每帧消隐期显式顺序扫描完成；
+//   这样控制器始终处于正常访问模式，扫描读不会被低功耗状态影响。
+sdr_as_ram  #( .self_refresh_open(1'b0))
 	u2_ram( 
 		.Sdr_clk(Clk),
 		.Sdr_clk_sft(Clk_sft),

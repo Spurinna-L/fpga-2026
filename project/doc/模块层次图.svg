@@ -101,6 +101,7 @@ text { font-family:"Microsoft YaHei","PingFang SC","SimHei","Segoe UI",sans-seri
 <text x="810" y="965" font-size="10" text-anchor="end" fill="#ea580c" font-weight="700">125M</text>
 <text x="86" y="1026" font-size="10.5" fill="#64748b">4 槽：0 / 307200 / 614400 / 921600；读写基址由 read/write_addr_index 选择。</text>
 <text x="86" y="1046" font-size="10.5" fill="#64748b">WRITE_V_FLIP=1：写地址按行倒序，抵消 BMP bottom-up，读侧即可顺序输出。</text>
+<text x="86" y="1064" font-size="10.5" fill="#64748b">另：sdr_refresh_sweep 在消隐期顺序扫描 4 槽，保持闲置槽数据。</text>
 <rect x="66" y="1090" width="774" height="190" rx="10" fill="#f8fafc" stroke="#64748b" stroke-width="1.3"/>
 <rect x="66" y="1090" width="6" height="190" rx="3" fill="#ea580c"/>
 <text x="84" y="1113" font-family="mono" font-size="14.5" font-weight="700" fill="#0f172a">sdram</text>
