@@ -800,7 +800,8 @@ module top(
     //   video_param_latch 做「2FF + 连续稳定检测 + vs 帧边界整组锁存」，
     //   再串 video_proc（2 拍）与 osd_composer / logo_overlay（均为组合，0 拍），
     //   并把 hs/vs 同步延迟 2 拍。
-    //   logo_en 恒 1：Logo 始终显示；若要跟 K4 一起开关，把它改成 regs_osd_en。
+    //   开关：osd_en（K4）同时控制「右上角参数面板」和「左上角 Logo」，
+    //   两者共用 video_post 内部同一份已同步信号 prm_osd_en，同帧同时开关。
     //-------------------------------------------------------------------------
     video_post u_video_post (
         .clk        (video_clk),
@@ -814,7 +815,6 @@ module top(
         .brightness (regs_brightness),
         .contrast   (regs_contrast),
         .osd_en     (regs_osd_en),
-        .logo_en    (1'b1),
         .time_mm    (regs_time_mm),
         .time_ss    (regs_time_ss),
         .img_idx    (img_idx),

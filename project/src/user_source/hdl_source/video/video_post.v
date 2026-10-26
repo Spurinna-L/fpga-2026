@@ -10,6 +10,11 @@
 //   - osd_composer / logo_overlay 都是**纯组合**（0 拍），所以这两级叠加
 //     不改变上面的 2 拍对齐关系，对帧缓存/行缓冲/转场完全无影响。
 //
+// 开关策略：右上角参数面板与左上角 Logo **共用同一个开关**（K4 → osd_en）。
+//   logo_overlay 用的也是 prm_osd_en（而不是原始 osd_en），好处：
+//     ① 两个图层共用同一份已同步信号，不会因跨时钟域采样时刻不同而错位；
+//     ② 都在 video_param_latch 的 vs 帧边界整组锁存后生效，同时开关，无撕裂。
+//
 // 参数输入均为慢变量（按键/1Hz），模块内部由 video_param_latch 做
 // 「2FF + 连续稳定检测 + vs 帧边界整组锁存」后再消费。
 //=============================================================================
@@ -26,8 +31,7 @@ module video_post (
 
     input  wire signed [7:0] brightness,
     input  wire [7:0]        contrast,
-    input  wire              osd_en,
-    input  wire              logo_en,
+    input  wire              osd_en,        // 参数面板 + Logo 共用的总开关
     input  wire [7:0]        time_mm,
     input  wire [7:0]        time_ss,
     input  wire [1:0]        img_idx,
@@ -141,6 +145,7 @@ module video_post (
 
     //-------------------------------------------------------------------------
     // ④ 左上角 Logo 水印图层（组合叠加，0 拍；不影响原图与转场）
+    //    开关与右上角参数面板共用 prm_osd_en：同一帧边界同时出现/消失
     //-------------------------------------------------------------------------
     wire        lg_de;
     wire [9:0]  lg_x, lg_y;
@@ -151,7 +156,7 @@ module video_post (
         .I_x   (osd_x),
         .I_y   (osd_y),
         .I_rgb (osd_rgb),
-        .I_en  (logo_en),
+        .I_en  (prm_osd_en),
         .O_de  (lg_de),
         .O_x   (lg_x),
         .O_y   (lg_y),
