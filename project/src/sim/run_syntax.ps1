@@ -36,6 +36,8 @@ $files = @(
     "$h\video\video_param_latch.v",
     "$h\video\osd_composer.v",
     "$h\video\font_ascii_8x16.v",
+    "$h\video\logo_overlay.v",
+    "$h\video\logo_data_32x32.v",
     "$h\hdmi\hdmi_phy_warpper.v",
     "$h\hdmi\lane_lvds_10_1.v",
     "$h\SD\ax_debounce.v",

@@ -44,7 +44,7 @@
 //   line_sched / frame_line_read                提前一行取 A/B
 //   line_buffer ×2 / mixer                      A/B 乒乓行缓冲与溶解/滑动
 //   disp_ctrl                                   当前槽/目标槽/转场进度
-//   video_post                                  亮度/对比度/OSD 挂载点（M2 队友）
+//   video_post                                  亮度/对比度 + 参数 OSD + Logo 图层（M2）
 //   test_pattern_640x480                        无图/首行未就绪时的彩条回退
 //   frame_read_write                            帧缓存写侧（仅开机预载）
 //   sdr_refresh_sweep                           消隐期顺序扫描，保持闲置槽
@@ -795,10 +795,12 @@ module top(
     );
 
     //-------------------------------------------------------------------------
-    // mixer 之后的视频后处理：亮度/对比度 + 参数 OSD（M2 扩展④）
+    // mixer 之后的视频后处理：亮度/对比度 + 参数 OSD + 左上角 Logo（M2 扩展④）
     //   参数在 50MHz 按键域，视频在 25MHz 像素域 → video_post 内部用
     //   video_param_latch 做「2FF + 连续稳定检测 + vs 帧边界整组锁存」，
-    //   再串 video_proc（2 拍）与 osd_composer，并把 hs/vs 同步延迟 2 拍。
+    //   再串 video_proc（2 拍）与 osd_composer / logo_overlay（均为组合，0 拍），
+    //   并把 hs/vs 同步延迟 2 拍。
+    //   logo_en 恒 1：Logo 始终显示；若要跟 K4 一起开关，把它改成 regs_osd_en。
     //-------------------------------------------------------------------------
     video_post u_video_post (
         .clk        (video_clk),
@@ -812,6 +814,7 @@ module top(
         .brightness (regs_brightness),
         .contrast   (regs_contrast),
         .osd_en     (regs_osd_en),
+        .logo_en    (1'b1),
         .time_mm    (regs_time_mm),
         .time_ss    (regs_time_ss),
         .img_idx    (img_idx),
