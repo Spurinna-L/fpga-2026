@@ -8,6 +8,7 @@ log/
 # Anlogic TD 综合、布局布线及下载生成物
 **/*_Runs/
 *.logw
+*.log
 *.area
 *.rpt
 *.bit

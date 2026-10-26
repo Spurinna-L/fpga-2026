@@ -44,7 +44,7 @@
 //   line_sched / frame_line_read                提前一行取 A/B
 //   line_buffer ×2 / mixer                      A/B 乒乓行缓冲与溶解/滑动
 //   disp_ctrl                                   当前槽/目标槽/转场进度
-//   video_post                                  亮度/对比度/OSD 挂载点（M2 队友）
+//   video_post                                  亮度/对比度 + 参数 OSD + Logo 图层（M2）
 //   test_pattern_640x480                        无图/首行未就绪时的彩条回退
 //   frame_read_write                            帧缓存写侧（仅开机预载）
 //   sdr_refresh_sweep                           消隐期顺序扫描，保持闲置槽
@@ -387,9 +387,13 @@ module top(
     wire [9:0]  post_x  = side_out[19:10];
     wire [9:0]  post_y  = side_out[9:0];
 
-    assign hs = post_hs;
-    assign vs = post_vs;
-    assign de = post_de;
+    // video_post 内部有 2 拍亮度/对比度流水，rgb_out 比输入晚 2 拍；
+    // 因此 hs/vs/de 必须取 video_post 对齐后的输出，才能与 post_rgb 同拍。
+    wire        post_hs_v, post_vs_v, post_de_v;
+
+    assign hs = post_hs_v;
+    assign vs = post_vs_v;
+    assign de = post_de_v;
 
     assign vout_data_raw = post_rgb;
 
@@ -791,7 +795,13 @@ module top(
     );
 
     //-------------------------------------------------------------------------
-    // mixer 之后的视频后处理（亮度/对比度/OSD 由队友填充）
+    // mixer 之后的视频后处理：亮度/对比度 + 参数 OSD + 左上角 Logo（M2 扩展④）
+    //   参数在 50MHz 按键域，视频在 25MHz 像素域 → video_post 内部用
+    //   video_param_latch 做「2FF + 连续稳定检测 + vs 帧边界整组锁存」，
+    //   再串 video_proc（2 拍）与 osd_composer / logo_overlay（均为组合，0 拍），
+    //   并把 hs/vs 同步延迟 2 拍。
+    //   开关：osd_en（K4）同时控制「右上角参数面板」和「左上角 Logo」，
+    //   两者共用 video_post 内部同一份已同步信号 prm_osd_en，同帧同时开关。
     //-------------------------------------------------------------------------
     video_post u_video_post (
         .clk        (video_clk),
@@ -811,9 +821,9 @@ module top(
         .trans_mode (regs_trans_mode),
         .audio_src  (regs_audio_src),
         .rgb_out    (post_rgb),
-        .hs_out     (),
-        .vs_out     (),
-        .de_out     (),
+        .hs_out     (post_hs_v),
+        .vs_out     (post_vs_v),
+        .de_out     (post_de_v),
         .x_out      (),
         .y_out      ()
     );
