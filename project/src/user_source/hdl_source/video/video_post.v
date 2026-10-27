@@ -3,12 +3,14 @@
 // video_post.v — mixer 之后的视频后处理挂载点（M2 协作边界）
 //-----------------------------------------------------------------------------
 // 本版已完成 M2 扩展④：实时亮度/对比度 + 参数 OSD 字符面板 + 左上角 Logo 图层。
-// 链路：rgb_in → video_proc（2 拍）→ osd_composer（组合）→ logo_overlay（组合）→ rgb_out
+// 扩展⑤：底部中文滚动字幕（scroll_text_overlay，K13 开关）。
+// 链路：rgb_in → video_proc（2 拍）→ osd_composer（组合）→ logo_overlay（组合）
+//        → scroll_text_overlay（组合）→ rgb_out
 //   - 输入 rgb_in/hs_in/vs_in/de_in/x_in/y_in 已与 mixer 输出严格同拍；
 //   - 输出 rgb_out/hs_out/vs_out/de_out/x_out/y_out 与输入相差 2 拍；
 //   - hs/vs 在模块内一起延迟 2 拍，与 de/x/y/rgb 保持同拍；
-//   - osd_composer / logo_overlay 都是**纯组合**（0 拍），所以这两级叠加
-//     不改变上面的 2 拍对齐关系，对帧缓存/行缓冲/转场完全无影响。
+//   - osd_composer / logo_overlay / scroll_text_overlay 都是**纯组合**（0 拍），
+//     所以这些叠加级不改变上面的 2 拍对齐关系，对帧缓存/行缓冲/转场完全无影响。
 //
 // 开关策略：右上角参数面板与左上角 Logo **共用同一个开关**（K4 → osd_en）。
 //   logo_overlay 用的也是 prm_osd_en（而不是原始 osd_en），好处：
@@ -32,6 +34,7 @@ module video_post (
     input  wire signed [7:0] brightness,
     input  wire [7:0]        contrast,
     input  wire              osd_en,        // 参数面板 + Logo 共用的总开关
+    input  wire              subtitle_en,   // 底部滚动字幕开关（K13）
     input  wire [7:0]        time_mm,
     input  wire [7:0]        time_ss,
     input  wire [1:0]        img_idx,
@@ -53,6 +56,7 @@ module video_post (
     wire signed [7:0] prm_brightness;
     wire [7:0]        prm_contrast;
     wire              prm_osd_en;
+    wire              prm_subtitle_en;
     wire [1:0]        prm_trans_mode;
 
     wire [4:0] ch_brt_sign, ch_brt_hi, ch_brt_lo;
@@ -67,6 +71,7 @@ module video_post (
         .I_brightness (brightness),
         .I_contrast   (contrast),
         .I_osd_en     (osd_en),
+        .I_subtitle_en(subtitle_en),
         .I_trans_mode (trans_mode),
         .I_img_idx    (img_idx),
         .I_time_mm    (time_mm),
@@ -74,6 +79,7 @@ module video_post (
         .O_brightness (prm_brightness),
         .O_contrast   (prm_contrast),
         .O_osd_en     (prm_osd_en),
+        .O_subtitle_en(prm_subtitle_en),
         .O_trans_mode (prm_trans_mode),
         .O_ch_brt_sign(ch_brt_sign),
         .O_ch_brt_hi  (ch_brt_hi),
@@ -164,7 +170,31 @@ module video_post (
     );
 
     //-------------------------------------------------------------------------
-    // ⑤ hs/vs 跟随 video_proc 的 2 拍延迟，保证全部边带同拍
+    // ⑤ 底部中文滚动字幕（纯组合叠加，0 拍；K13 独立开关）
+    //    位置在模块内部按 vs 帧边界更新，开关同样经过帧边界同步，
+    //    因此打开/关闭时不会出现半帧错位。关闭时滚动暂停。
+    //-------------------------------------------------------------------------
+    wire        st_de;
+    wire [9:0]  st_x, st_y;
+    wire [23:0] st_rgb;
+
+    scroll_text_overlay u_scroll (
+        .I_clk (clk),
+        .I_rst (rst),
+        .I_vs  (vs_in),
+        .I_de  (lg_de),
+        .I_x   (lg_x),
+        .I_y   (lg_y),
+        .I_rgb (lg_rgb),
+        .I_en  (prm_subtitle_en),
+        .O_de  (st_de),
+        .O_x   (st_x),
+        .O_y   (st_y),
+        .O_rgb (st_rgb)
+    );
+
+    //-------------------------------------------------------------------------
+    // ⑥ hs/vs 跟随 video_proc 的 2 拍延迟，保证全部边带同拍
     //-------------------------------------------------------------------------
     reg hs_d1, hs_d2, vs_d1, vs_d2;
     always @(posedge clk or posedge rst) begin
@@ -181,10 +211,10 @@ module video_post (
         end
     end
 
-    assign rgb_out = lg_rgb;
-    assign de_out  = lg_de;
-    assign x_out   = lg_x;
-    assign y_out   = lg_y;
+    assign rgb_out = st_rgb;
+    assign de_out  = st_de;
+    assign x_out   = st_x;
+    assign y_out   = st_y;
     assign hs_out  = hs_d2;
     assign vs_out  = vs_d2;
 

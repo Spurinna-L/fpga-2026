@@ -23,6 +23,7 @@ module tb_param_latch;
     reg  signed [7:0] br  = 8'sd0;
     reg  [7:0]        cnt = 8'd128;
     reg               en  = 1'b1;
+    reg               sub = 1'b1;
     reg  [1:0]        trm = 2'd0;
     reg  [1:0]        img = 2'd0;
     reg  [7:0]        mm  = 8'd0;
@@ -31,6 +32,7 @@ module tb_param_latch;
     wire signed [7:0] o_br;
     wire [7:0]        o_cnt;
     wire              o_en;
+    wire              o_sub;
     wire [1:0]        o_trm;
 
     wire [4:0] o_sign, o_bh, o_bl, o_ch, o_cm, o_cl;
@@ -43,6 +45,7 @@ module tb_param_latch;
         .I_brightness (br),
         .I_contrast   (cnt),
         .I_osd_en     (en),
+        .I_subtitle_en(sub),
         .I_trans_mode (trm),
         .I_img_idx    (img),
         .I_time_mm    (mm),
@@ -50,6 +53,7 @@ module tb_param_latch;
         .O_brightness (o_br),
         .O_contrast   (o_cnt),
         .O_osd_en     (o_en),
+        .O_subtitle_en(o_sub),
         .O_trans_mode (o_trm),
         .O_ch_brt_sign(o_sign),
         .O_ch_brt_hi  (o_bh),
@@ -73,10 +77,10 @@ module tb_param_latch;
     // 12 个字符码 + 4 个参数值，打包成一个向量比较
     wire [59:0] obs_ch = {o_sign, o_bh, o_bl, o_ch, o_cm, o_cl,
                           o_mmh, o_mml, o_ssh, o_ssl, o_img, o_tr};
-    wire [17:0] obs_prm = {o_br, o_cnt, o_en, o_trm};
+    wire [18:0] obs_prm = {o_br, o_cnt, o_en, o_sub, o_trm};
 
     reg [59:0] exp_ch;
-    reg [17:0] exp_prm;
+    reg [18:0] exp_prm;
 
     task expect_ch;
         input [4:0] sign, bh, bl, ch, cm, cl;
@@ -111,8 +115,8 @@ module tb_param_latch;
             end
             if (obs_prm !== exp_prm) begin
                 errors = errors + 1;
-                $display("FAIL [%0s] prm: got brt=%0d cnt=%0d en=%b trm=%0d", tag,
-                         o_br, o_cnt, o_en, o_trm);
+                $display("FAIL [%0s] prm: got brt=%0d cnt=%0d en=%b sub=%b trm=%0d", tag,
+                         o_br, o_cnt, o_en, o_sub, o_trm);
             end
         end
     endtask
@@ -127,7 +131,7 @@ module tb_param_latch;
         rst = 1'b0;
 
         expect_ch(5'd12, 5'd0, 5'd0, 5'd1, 5'd2, 5'd8, 5'd0, 5'd0, 5'd0, 5'd0, 5'd1, 5'd0);
-        exp_prm = {8'sd0, 8'd128, 1'b1, 2'd0};
+        exp_prm = {8'sd0, 8'd128, 1'b1, 1'b1, 2'd0};
         compare("reset default");
 
         //---------------------------------------------------------------------
@@ -152,7 +156,7 @@ module tb_param_latch;
         //---------------------------------------------------------------------
         vs_pulse;
         expect_ch(5'd13, 5'd0, 5'd8, 5'd0, 5'd6, 5'd4, 5'd0, 5'd9, 5'd5, 5'd9, 5'd4, 5'd2);
-        exp_prm = {-8'sd8, 8'd64, 1'b0, 2'd2};
+        exp_prm = {-8'sd8, 8'd64, 1'b0, 1'b1, 2'd2};
         compare("latch #1");
 
         //---------------------------------------------------------------------
@@ -172,7 +176,7 @@ module tb_param_latch;
 
         vs_pulse;
         expect_ch(5'd12, 5'd6, 5'd4, 5'd1, 5'd9, 5'd2, 5'd0, 5'd0, 5'd0, 5'd0, 5'd1, 5'd1);
-        exp_prm = {8'sd64, 8'd192, 1'b1, 2'd1};
+        exp_prm = {8'sd64, 8'd192, 1'b1, 1'b1, 2'd1};
         compare("latch #2");
 
         //---------------------------------------------------------------------
@@ -193,7 +197,7 @@ module tb_param_latch;
         repeat (20) @(posedge clk);
         vs_pulse;
         expect_ch(5'd13, 5'd6, 5'd4, 5'd1, 5'd9, 5'd2, 5'd0, 5'd0, 5'd0, 5'd0, 5'd1, 5'd1);
-        exp_prm = {-8'sd64, 8'd192, 1'b1, 2'd1};
+        exp_prm = {-8'sd64, 8'd192, 1'b1, 1'b1, 2'd1};
         compare("latch #3");
 
         //---------------------------------------------------------------------
@@ -204,7 +208,7 @@ module tb_param_latch;
         repeat (20) @(posedge clk);
         vs_pulse;
         expect_ch(5'd13, 5'd6, 5'd4, 5'd0, 5'd0, 5'd0, 5'd0, 5'd0, 5'd0, 5'd0, 5'd1, 5'd1);
-        exp_prm = {-8'sd64, 8'd0, 1'b1, 2'd1};
+        exp_prm = {-8'sd64, 8'd0, 1'b1, 1'b1, 2'd1};
         compare("cnt=0");
 
         @(negedge clk);
@@ -212,8 +216,25 @@ module tb_param_latch;
         repeat (20) @(posedge clk);
         vs_pulse;
         expect_ch(5'd13, 5'd6, 5'd4, 5'd2, 5'd5, 5'd5, 5'd0, 5'd0, 5'd0, 5'd0, 5'd1, 5'd1);
-        exp_prm = {-8'sd64, 8'd255, 1'b1, 2'd1};
+        exp_prm = {-8'sd64, 8'd255, 1'b1, 1'b1, 2'd1};
         compare("cnt=255");
+
+        //---------------------------------------------------------------------
+        // 8) 字幕开关（K13）单独跨域：其他参数不变，仅 sub 1 → 0 → 1
+        //---------------------------------------------------------------------
+        @(negedge clk);
+        sub = 1'b0;
+        repeat (20) @(posedge clk);
+        vs_pulse;
+        exp_prm = {-8'sd64, 8'd255, 1'b1, 1'b0, 2'd1};
+        compare("subtitle off");
+
+        @(negedge clk);
+        sub = 1'b1;
+        repeat (20) @(posedge clk);
+        vs_pulse;
+        exp_prm = {-8'sd64, 8'd255, 1'b1, 1'b1, 2'd1};
+        compare("subtitle on");
 
         $display("--------------------------------------------------");
         $display("tb_param_latch: %0d checks, %0d errors", checks, errors);

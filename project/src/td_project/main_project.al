@@ -612,6 +612,31 @@
                     <Attr Name="CompileOrder" Val="77"/>
                 </FileInfo>
             </File>
+            <File Path="../user_source/hdl_source/video/font_cn_16x16.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="78"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/scroll_text_overlay.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="79"/>
+                </FileInfo>
+            </File>
+            <File Path="../sim/tb_scroll_text.v">
+                <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="80"/>
+                </FileInfo>
+            </File>
         </Verilog>
         <ADC_FILE>
             <File Path="../user_source/constraints_source/pin.adc">

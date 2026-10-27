@@ -17,6 +17,7 @@
 //   in  disp_buf_idx[1:0]    当前显示缓冲
 //   out brightness/contrast  亮度（-64..+64）/ 对比度（64..192）
 //   out trans_mode/osd_en    转场模式 / OSD 开关
+//   out subtitle_en          底部滚动字幕开关（K13）
 //   out audio_src/timbre     音源 L1/L2、L2 音色
 //   out viz_mode             可视化模式 0..3
 //   out time_mm/time_ss/tick_1hz  时间戳与 1Hz 脉冲
@@ -31,7 +32,8 @@
 //   [0] 下一张 / [1] 自动轮播（直接送 sd_card_bmp，本模块只旁路）
 //   [2] 转场模式  [3] OSD 开关  [4]/[5] 亮度 +/-8
 //   [6]/[7] 对比度 +/-16  [8] 音源  [9] 音色  [10] 可视化
-//   [11] 参数一键复位  [14] probe_m0  [15] debug_single
+//   [11] 参数一键复位  [12] 底部滚动字幕开关
+//   [14] probe_m0  [15] debug_single
 //
 // 数码管 4 位（高位在左）：
 //   [15:12] SD 状态码  [11:8] 图片序号  [7:4] 转场/OSD  [3:0] 音源/可视化
@@ -57,6 +59,7 @@ module regs
     output reg  [7:0]  contrast,        // 默认 128，范围 64..192
     output reg  [1:0]  trans_mode,     // 0=溶解 1=滑动 2=直切
     output reg         osd_en,
+    output reg         subtitle_en,    // 底部滚动字幕开关（K13）
     output reg  [1:0]  audio_src,      // 0=L1 1=L2
     output reg  [1:0]  viz_mode,       // 0=关 1=声波 2=频谱 3=声波+频谱
     output reg  [1:0]  timbre,
@@ -125,6 +128,7 @@ module regs
             contrast   <= 8'd128;
             trans_mode <= 2'd0;
             osd_en     <= 1'b1;
+            subtitle_en <= 1'b1;
             audio_src  <= 2'd0;
             viz_mode   <= 2'd3;
             timbre     <= 2'd0;
@@ -136,6 +140,7 @@ module regs
                 contrast   <= 8'd128;
                 trans_mode <= 2'd0;
                 osd_en     <= 1'b1;
+                subtitle_en <= 1'b1;
                 audio_src  <= 2'd0;
                 viz_mode   <= 2'd3;
                 timbre     <= 2'd0;
@@ -146,6 +151,8 @@ module regs
                     trans_mode <= (trans_mode == 2'd2) ? 2'd0 : (trans_mode + 2'd1);
                 if (key_press[3])
                     osd_en <= ~osd_en;
+                if (key_press[12])
+                    subtitle_en <= ~subtitle_en;
                 if (key_press[4])
                     brightness <= (brightness >= 8'sd64) ? 8'sd64 : (brightness + 8'sd8);
                 if (key_press[5])

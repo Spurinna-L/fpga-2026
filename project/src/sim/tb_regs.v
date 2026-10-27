@@ -15,6 +15,7 @@ module tb_regs;
     wire [7:0]  contrast;
     wire [1:0]  trans_mode;
     wire        osd_en;
+    wire        subtitle_en;
     wire [1:0]  audio_src;
     wire [1:0]  viz_mode;
     wire [1:0]  timbre;
@@ -36,6 +37,7 @@ module tb_regs;
         .contrast     (contrast),
         .trans_mode   (trans_mode),
         .osd_en       (osd_en),
+        .subtitle_en  (subtitle_en),
         .audio_src    (audio_src),
         .viz_mode     (viz_mode),
         .timbre       (timbre),
@@ -82,6 +84,7 @@ module tb_regs;
         check8(contrast,   8'd128,   "contrast default");
         check8(trans_mode, 8'd0,     "trans_mode default");
         check8({7'd0, osd_en}, 8'd1, "osd_en default");
+        check8({7'd0, subtitle_en}, 8'd1, "subtitle_en default");
         check8({6'd0, audio_src}, 8'd0, "audio_src default");
         check8({6'd0, viz_mode}, 8'd3,  "viz_mode default");
 
@@ -105,6 +108,8 @@ module tb_regs;
         press(2);  check8(trans_mode, 8'd2, "trans_mode 2");
         press(2);  check8(trans_mode, 8'd0, "trans_mode wrap");
         press(3);  check8({7'd0, osd_en}, 8'd0, "osd off");
+        press(12); check8({7'd0, subtitle_en}, 8'd0, "subtitle off");
+        press(12); check8({7'd0, subtitle_en}, 8'd1, "subtitle on");
         press(8);  check8({6'd0, audio_src}, 8'd1, "audio L2");
         press(10); check8({6'd0, viz_mode}, 8'd0, "viz wrap 3->0");
 
@@ -113,6 +118,7 @@ module tb_regs;
         check8(brightness, 8'sd0,  "reset brightness");
         check8(contrast,   8'd128, "reset contrast");
         check8({7'd0, osd_en}, 8'd1, "reset osd");
+        check8({7'd0, subtitle_en}, 8'd1, "reset subtitle");
         check8({6'd0, audio_src}, 8'd0, "reset audio");
         check8({6'd0, viz_mode}, 8'd3, "reset viz");
 

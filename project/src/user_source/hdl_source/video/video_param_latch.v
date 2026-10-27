@@ -22,12 +22,14 @@
 //   I_brightness signed[7:0]  亮度 -64..+64
 //   I_contrast[7:0]           对比度 64..192
 //   I_osd_en                   OSD 总开关
+//   I_subtitle_en             底部滚动字幕开关（K13）
 //   I_trans_mode[1:0]          转场模式 0..2
 //   I_img_idx[1:0]             当前图片序号 0..3
 //   I_time_mm / I_time_ss[7:0] 上电计时
 //
 // 输出（像素域，帧内恒定）：
-//   O_brightness / O_contrast / O_osd_en / O_trans_mode  原样供 video_proc 使用
+//   O_brightness / O_contrast / O_osd_en / O_subtitle_en / O_trans_mode
+//                              原样供 video_proc / 字幕图层使用
 //   O_ch_*[4:0]                 OSD 字符码（见 font_ascii_8x16.v 码表）
 //
 // 字符码约定（与 font_ascii_8x16.v 严格一致）：
@@ -58,6 +60,7 @@ module video_param_latch #(
     input  wire signed [7:0]  I_brightness,
     input  wire [7:0]         I_contrast,
     input  wire               I_osd_en,
+    input  wire               I_subtitle_en,
     input  wire [1:0]         I_trans_mode,
     input  wire [1:0]         I_img_idx,
     input  wire [7:0]         I_time_mm,
@@ -67,6 +70,7 @@ module video_param_latch #(
     output reg  signed [7:0]  O_brightness,
     output reg  [7:0]         O_contrast,
     output reg                O_osd_en,
+    output reg                O_subtitle_en,
     output reg  [1:0]         O_trans_mode,
 
     // ---- OSD 字符码 ----
@@ -87,10 +91,11 @@ module video_param_latch #(
     //-------------------------------------------------------------------------
     // 参数总线打包（顺序固定，只用于「整体是否变化」的比较和整组锁存）
     //-------------------------------------------------------------------------
-    wire [36:0] prm_bus = {
-        I_brightness,   // [36:29]
-        I_contrast,     // [28:21]
-        I_osd_en,       // [20]
+    wire [37:0] prm_bus = {
+        I_brightness,   // [37:30]
+        I_contrast,     // [29:22]
+        I_osd_en,       // [21]
+        I_subtitle_en,  // [20]
         I_trans_mode,   // [19:18]
         I_img_idx,      // [17:16]
         I_time_mm,      // [15:8]
@@ -100,14 +105,14 @@ module video_param_latch #(
     //-------------------------------------------------------------------------
     // 2FF 同步 + 稳定检测
     //-------------------------------------------------------------------------
-    reg [36:0] sync0, sync1, sync1_d;
+    reg [37:0] sync0, sync1, sync1_d;
     reg [3:0]  stable_cnt;
 
     always @(posedge I_clk or posedge I_rst) begin
         if (I_rst) begin
-            sync0      <= 37'd0;
-            sync1      <= 37'd0;
-            sync1_d    <= 37'd0;
+            sync0      <= 38'd0;
+            sync1      <= 38'd0;
+            sync1_d    <= 38'd0;
             stable_cnt <= 4'd0;
         end else begin
             sync0   <= prm_bus;
@@ -138,9 +143,10 @@ module video_param_latch #(
     //-------------------------------------------------------------------------
     // 从稳定快照中拆出各参数
     //-------------------------------------------------------------------------
-    wire signed [7:0] br  = sync1[36:29];
-    wire [7:0]        cnt = sync1[28:21];
-    wire              en  = sync1[20];
+    wire signed [7:0] br  = sync1[37:30];
+    wire [7:0]        cnt = sync1[29:22];
+    wire              en  = sync1[21];
+    wire              sub = sync1[20];
     wire [1:0]        trm = sync1[19:18];
     wire [1:0]        img = sync1[17:16];
     wire [7:0]        mm  = sync1[15:8];
@@ -174,6 +180,7 @@ module video_param_latch #(
             O_brightness <= 8'sd0;
             O_contrast   <= 8'd128;
             O_osd_en     <= 1'b1;
+            O_subtitle_en <= 1'b1;
             O_trans_mode <= 2'd0;
 
             O_ch_brt_sign <= 5'd12;   // '+'
@@ -192,6 +199,7 @@ module video_param_latch #(
             O_brightness <= br;
             O_contrast   <= cnt;
             O_osd_en     <= en;
+            O_subtitle_en <= sub;
             O_trans_mode <= trm;
 
             O_ch_brt_sign <= (br < 8'sd0) ? 5'd13 : 5'd12;   // '-' : '+'

@@ -746,6 +746,7 @@ module top(
     wire [7:0]  regs_contrast;
     wire [1:0]  regs_trans_mode;
     wire        regs_osd_en;
+    wire        regs_subtitle_en;
     wire [1:0]  regs_audio_src;
     wire [1:0]  regs_viz_mode;
     wire [1:0]  regs_timbre;
@@ -766,6 +767,7 @@ module top(
         .contrast     (regs_contrast),
         .trans_mode   (regs_trans_mode),
         .osd_en       (regs_osd_en),
+        .subtitle_en  (regs_subtitle_en),
         .audio_src    (regs_audio_src),
         .viz_mode     (regs_viz_mode),
         .timbre       (regs_timbre),
@@ -802,6 +804,7 @@ module top(
     //   并把 hs/vs 同步延迟 2 拍。
     //   开关：osd_en（K4）同时控制「右上角参数面板」和「左上角 Logo」，
     //   两者共用 video_post 内部同一份已同步信号 prm_osd_en，同帧同时开关。
+    //   底部滚动字幕由 K13 → subtitle_en 独立开关（同样在帧边界同步）。
     //-------------------------------------------------------------------------
     video_post u_video_post (
         .clk        (video_clk),
@@ -815,6 +818,7 @@ module top(
         .brightness (regs_brightness),
         .contrast   (regs_contrast),
         .osd_en     (regs_osd_en),
+        .subtitle_en(regs_subtitle_en),
         .time_mm    (regs_time_mm),
         .time_ss    (regs_time_ss),
         .img_idx    (img_idx),
