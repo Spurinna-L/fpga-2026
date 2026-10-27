@@ -199,10 +199,10 @@ module video_post (
     reg hs_d1, hs_d2, vs_d1, vs_d2;
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            hs_d1 <= 1'b0;
-            hs_d2 <= 1'b0;
-            vs_d1 <= 1'b0;
-            vs_d2 <= 1'b0;
+            hs_d1 <= 1'b1;
+            hs_d2 <= 1'b1;
+            vs_d1 <= 1'b1;
+            vs_d2 <= 1'b1;
         end else begin
             hs_d1 <= hs_in;
             hs_d2 <= hs_d1;

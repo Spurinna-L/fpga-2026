@@ -1,5 +1,12 @@
 # 1) 640x480 timing: 525 lines/frame, 307200 pixels/frame
 # 2) audio chain: 20ms -> audio_valid ~= 960 (48kHz), acr_valid ~= 20
+# 3) M0-M2 video/storage/OSD testbenches
+#
+# Note: tb_chain simulates 9 full frames (~151 ms sim time) and takes about
+# 4-5 minutes in iverilog; this is expected, not a hang.
+#
+# Any iverilog compile failure aborts the run immediately, so a stale .out
+# from a previous run can never be mistaken for a PASS.
 $ErrorActionPreference = "Stop"
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -10,87 +17,151 @@ $h    = "$src\user_source\hdl_source"
 
 if (!(Test-Path $iv)) { Write-Error "iverilog not found: $iv" }
 
-Write-Host "=== timing ==="
-& $iv -g2012 -o "$here\tb_timing.out" -I "$h\SD" `
-    "$here\tb_timing.v" `
-    "$h\SD\video_timing_data.v" `
+function Invoke-Tb {
+    param(
+        [string]   $Name,
+        [string[]] $Files,
+        [string]   $Include = ""
+    )
+    Write-Host "=== $Name ==="
+    $out = "$here\$Name.out"
+    Remove-Item $out -ErrorAction SilentlyContinue
+    if ($Include -ne "") {
+        & $iv -g2012 -D SIM_STUBS -I $Include -s $Name -o $out @Files
+    } else {
+        & $iv -g2012 -D SIM_STUBS -s $Name -o $out @Files
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "iverilog compile FAILED: $Name"
+    }
+    $log = & $vvp $out 2>&1
+    $code = $LASTEXITCODE
+    $log | ForEach-Object { Write-Host $_ }
+    if ($code -ne 0) {
+        throw "vvp run FAILED: $Name"
+    }
+    $text = ($log | Out-String)
+    if (($text -match 'FAIL') -or ($text -match 'TIMEOUT') -or ($text -match '(?m)^ERR ')) {
+        throw "testbench reported FAIL: $Name"
+    }
+}
+
+Invoke-Tb 'tb_timing' @(
+    "$here\tb_timing.v",
+    "$h\SD\video_timing_data.v",
     "$h\SD\color_bar.v"
-& $vvp "$here\tb_timing.out"
+) "$h\SD"
 
-Write-Host "=== audio ==="
-& $iv -g2012 -o "$here\tb_audio.out" `
-    "$here\tb_audio.v" `
-    "$h\audio\hdmi_audio_tone_i2s_64fs.v" `
-    "$h\audio\I2S_receiver.v" `
+Invoke-Tb 'tb_audio' @(
+    "$here\tb_audio.v",
+    "$h\audio\hdmi_audio_tone_i2s_64fs.v",
+    "$h\audio\I2S_receiver.v",
     "$h\audio\audio_arc_calculate.v"
-& $vvp "$here\tb_audio.out"
+)
 
-Write-Host "=== fb dual read (A/B lockstep) ==="
-& $iv -g2012 -s tb_fb_dual -o "$here\tb_fb_dual.out" `
-    "$here\tb_fb_dual.v" `
-    "$here\sdram_bhv.v" `
-    "$h\SD\frame_read_write_dual.v" `
-    "$h\SD\frame_fifo_read_arb.v" `
-    "$h\SD\frame_fifo_write.v" `
-    "$h\SD\rd_arbiter.v" `
-    "$h\ip\afifo_16_32_256.v" `
+# M1 reference: dual-read engine (not synthesized)
+Invoke-Tb 'tb_fb_dual' @(
+    "$here\tb_fb_dual.v",
+    "$here\sdram_bhv.v",
+    "$h\SD\frame_read_write_dual.v",
+    "$h\SD\frame_fifo_read_arb.v",
+    "$h\SD\frame_fifo_write.v",
+    "$h\SD\rd_arbiter.v",
+    "$h\ip\afifo_16_32_256.v",
     "$h\ip\afifo_32_16_256.v"
-& $vvp "$here\tb_fb_dual.out"
+)
 
-Write-Host "=== regs (16 keys / seg / 1Hz) ==="
-& $iv -g2012 -s tb_regs -o "$here\tb_regs.out" `
-    "$here\tb_regs.v" `
+Invoke-Tb 'tb_regs' @(
+    "$here\tb_regs.v",
     "$h\control\regs.v"
-& $vvp "$here\tb_regs.out"
+)
 
-Write-Host "=== M2 line read (A/B 1280 words) ==="
-& $iv -g2012 -s tb_line_read -o "$here\tb_line_read.out" `
-    "$here\tb_line_read.v" `
+Invoke-Tb 'tb_line_read' @(
+    "$here\tb_line_read.v",
     "$h\video\frame_line_read.v"
-& $vvp "$here\tb_line_read.out"
+)
 
-Write-Host "=== M2 mixer (dissolve / slide) ==="
-& $iv -g2012 -s tb_mixer -o "$here\tb_mixer.out" `
-    "$here\tb_mixer.v" `
+Invoke-Tb 'tb_mixer' @(
+    "$here\tb_mixer.v",
     "$h\video\mixer.v"
-& $vvp "$here\tb_mixer.out"
+)
 
-Write-Host "=== M2 disp_ctrl (progress / direct) ==="
-& $iv -g2012 -s tb_disp_ctrl -o "$here\tb_disp_ctrl.out" `
-    "$here\tb_disp_ctrl.v" `
+Invoke-Tb 'tb_disp_ctrl' @(
+    "$here\tb_disp_ctrl.v",
     "$h\video\disp_ctrl.v"
-& $vvp "$here\tb_disp_ctrl.out"
+)
 
-Write-Host "=== M2 line scheduler ==="
-& $iv -g2012 -s tb_line_sched -o "$here\tb_line_sched.out" `
-    "$here\tb_line_sched.v" `
+Invoke-Tb 'tb_line_sched' @(
+    "$here\tb_line_sched.v",
     "$h\video\line_sched.v"
-& $vvp "$here\tb_line_sched.out"
+)
 
-Write-Host "=== M2 line buffer (dual clock) ==="
-& $iv -g2012 -s tb_line_buffer -o "$here\tb_line_buffer.out" `
-    "$here\tb_line_buffer.v" `
-    "$here\base_stubs.v" `
+# line buffer / chain need the EG_LOGIC_BRAM model from base_stubs (-D SIM_STUBS)
+Invoke-Tb 'tb_line_buffer' @(
+    "$here\tb_line_buffer.v",
+    "$here\base_stubs.v",
     "$h\video\line_buffer.v"
-& $vvp "$here\tb_line_buffer.out"
+)
 
-Write-Host "=== M2 video chain (line read + buffer + mixer) ==="
-& $iv -g2012 -s tb_chain -I "$h\SD" -o "$here\tb_chain.out" `
-    "$here\tb_chain.v" `
-    "$here\base_stubs.v" `
-    "$h\SD\video_timing_data.v" `
-    "$h\SD\color_bar.v" `
-    "$h\video\video_pos.v" `
-    "$h\video\line_sched.v" `
-    "$h\video\disp_ctrl.v" `
-    "$h\video\frame_line_read.v" `
-    "$h\video\line_buffer.v" `
-    "$h\video\mixer.v" `
+Invoke-Tb 'tb_chain' @(
+    "$here\tb_chain.v",
+    "$here\base_stubs.v",
+    "$h\SD\video_timing_data.v",
+    "$h\SD\color_bar.v",
+    "$h\video\video_pos.v",
+    "$h\video\line_sched.v",
+    "$h\video\disp_ctrl.v",
+    "$h\video\frame_line_read.v",
+    "$h\video\line_buffer.v",
+    "$h\video\mixer.v",
     "$h\video\video_delay2.v"
-& $vvp "$here\tb_chain.out"
+) "$h\SD"
 
-Write-Host "=== sdram selftest ==="
-& $iv -g2012 -s tb_selftest -o "$here\tb_selftest.out" `
-    "$here\tb_selftest.v" `
+Invoke-Tb 'tb_video_proc' @(
+    "$here\tb_video_proc.v",
+    "$h\video\video_proc.v"
+)
+
+Invoke-Tb 'tb_param_latch' @(
+    "$here\tb_param_latch.v",
+    "$h\video\video_param_latch.v"
+)
+
+Invoke-Tb 'tb_osd' @(
+    "$here\tb_osd.v",
+    "$h\video\osd_composer.v",
+    "$h\video\font_ascii_8x16.v"
+)
+
+Invoke-Tb 'tb_logo_overlay' @(
+    "$here\tb_logo_overlay.v",
+    "$h\video\logo_overlay.v",
+    "$h\video\logo_data_32x32.v"
+)
+
+# M2 subtitle: font ROM lookup + frame-boundary scroll + bypass
+Invoke-Tb 'tb_scroll_text' @(
+    "$here\tb_scroll_text.v",
+    "$h\video\scroll_text_overlay.v",
+    "$h\video\font_cn_16x16.v"
+)
+
+# Integration: 2-cycle sideband alignment + pixel-exact bypass when OSD/subtitle off
+Invoke-Tb 'tb_video_post' @(
+    "$here\tb_video_post.v",
+    "$h\video\video_post.v",
+    "$h\video\video_proc.v",
+    "$h\video\video_param_latch.v",
+    "$h\video\osd_composer.v",
+    "$h\video\font_ascii_8x16.v",
+    "$h\video\logo_overlay.v",
+    "$h\video\logo_data_32x32.v",
+    "$h\video\scroll_text_overlay.v",
+    "$h\video\font_cn_16x16.v"
+)
+
+# M1 debug tool: SDRAM self-test (not synthesized)
+Invoke-Tb 'tb_selftest' @(
+    "$here\tb_selftest.v",
     "$h\SD\sdram_selftest.v"
-& $vvp "$here\tb_selftest.out"
+)

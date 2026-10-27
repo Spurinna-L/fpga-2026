@@ -50,10 +50,14 @@ module tb_audio;
 
     integer valid_cnt = 0;
     integer acr_cnt   = 0;
+    reg [19:0] acr_n_seen = 20'd0;
 
     always @(posedge clk) begin
         if (audio_valid) valid_cnt <= valid_cnt + 1;
-        if (acr_valid)   acr_cnt   <= acr_cnt + 1;
+        if (acr_valid) begin
+            acr_cnt   <= acr_cnt + 1;
+            acr_n_seen <= acr_n;
+        end
     end
 
     initial begin
@@ -63,6 +67,14 @@ module tb_audio;
         #20_000_000; // 20ms
         $display("audio_valid=%0d (expect ~960), acr_valid=%0d (expect ~20)", valid_cnt, acr_cnt);
         $display("last L=%0d R=%0d cts=%0d n=%0d", $signed(audio_l), $signed(audio_r), acr_cts, acr_n);
+        $display("acr_n captured at acr_valid = %0d", acr_n_seen);
+        if ((valid_cnt < 900) || (valid_cnt > 1020) ||
+            (acr_cnt   < 15)  || (acr_cnt   > 25)   ||
+            (acr_n_seen !== 20'd6144)) begin
+            $display("tb_audio: FAIL");
+        end else begin
+            $display("tb_audio: PASS");
+        end
         $finish;
     end
 endmodule

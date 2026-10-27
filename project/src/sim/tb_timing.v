@@ -22,6 +22,7 @@ module tb_timing;
     integer hs_cnt = 0;
     integer de_cnt = 0;
     integer frames = 0;
+    integer errors = 0;
     integer hs_prev = 0;
     integer de_prev = 0;
     reg hs_d = 0, vs_d = 0;
@@ -32,8 +33,17 @@ module tb_timing;
         if (hs && !hs_d) hs_cnt <= hs_cnt + 1;
         if (de)          de_cnt <= de_cnt + 1;
         if (vs && !vs_d) begin
-            if (frames > 0)
+            if (frames > 0) begin
                 $display("frame %0d: lines=%0d pixels=%0d", frames, hs_cnt - hs_prev, de_cnt - de_prev);
+                if ((hs_cnt - hs_prev) != 525) begin
+                    errors = errors + 1;
+                    $display("FAIL: expect 525 lines/frame");
+                end
+                if ((de_cnt - de_prev) != 307200) begin
+                    errors = errors + 1;
+                    $display("FAIL: expect 307200 pixels/frame");
+                end
+            end
             hs_prev <= hs_cnt;
             de_prev <= de_cnt;
             frames  <= frames + 1;
@@ -45,6 +55,9 @@ module tb_timing;
         #200;
         rst = 0;
         #52_000_000; // > 3 frames
+        $display("tb_timing: %0d frames, %0d errors", frames, errors);
+        if (errors == 0) $display("tb_timing: PASS");
+        else             $display("tb_timing: FAIL");
         $finish;
     end
 endmodule

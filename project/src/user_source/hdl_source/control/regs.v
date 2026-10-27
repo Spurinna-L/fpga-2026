@@ -22,8 +22,7 @@
 //   out viz_mode             可视化模式 0..3
 //   out time_mm/time_ss/tick_1hz  时间戳与 1Hz 脉冲
 //   out seg_value[31:0]      数码管显示值（4 位 × 4bit）
-//   out key_press[15:0]      单拍按下脉冲
-//   out debug_single/probe_m0  K16/K15 调试标志（当前顶层无消费者）
+//   out key_press[15:0]      单拍按下脉冲（当前顶层未消费，保留给后续模块）
 //
 // 参数：
 //   SEC_CYCLES = 26'd49_999_999   50MHz 下 1 秒
@@ -32,8 +31,7 @@
 //   [0] 下一张 / [1] 自动轮播（直接送 sd_card_bmp，本模块只旁路）
 //   [2] 转场模式  [3] OSD 开关  [4]/[5] 亮度 +/-8
 //   [6]/[7] 对比度 +/-16  [8] 音源  [9] 音色  [10] 可视化
-//   [11] 参数一键复位  [12] 底部滚动字幕开关
-//   [14] probe_m0  [15] debug_single
+//   [11] 参数一键复位  [12] 底部滚动字幕开关  [13]~[15] 预留
 //
 // 数码管 4 位（高位在左）：
 //   [15:12] SD 状态码  [11:8] 图片序号  [7:4] 转场/OSD  [3:0] 音源/可视化
@@ -63,8 +61,6 @@ module regs
     output reg  [1:0]  audio_src,      // 0=L1 1=L2
     output reg  [1:0]  viz_mode,       // 0=关 1=声波 2=频谱 3=声波+频谱
     output reg  [1:0]  timbre,
-    output reg         debug_single,   // K16：单通道调试（只读/只显示 A）
-    output reg         probe_m0,       // K15：切换到 M0 原始单读引擎（硬件对比）
 
     output reg  [7:0]  time_mm,        // 00..99
     output reg  [7:0]  time_ss,        // 00..59
@@ -132,8 +128,6 @@ module regs
             audio_src  <= 2'd0;
             viz_mode   <= 2'd3;
             timbre     <= 2'd0;
-            debug_single <= 1'b0;
-            probe_m0     <= 1'b1;      // 默认使用 M0 单读引擎（稳定通路）
         end else begin
             if (key_press[11]) begin
                 brightness <= 8'sd0;
@@ -144,8 +138,6 @@ module regs
                 audio_src  <= 2'd0;
                 viz_mode   <= 2'd3;
                 timbre     <= 2'd0;
-                debug_single <= 1'b0;
-                probe_m0     <= 1'b1;
             end else begin
                 if (key_press[2])
                     trans_mode <= (trans_mode == 2'd2) ? 2'd0 : (trans_mode + 2'd1);
@@ -167,10 +159,6 @@ module regs
                     timbre <= (timbre == 2'd2) ? 2'd0 : (timbre + 2'd1);
                 if (key_press[10])
                     viz_mode <= viz_mode + 2'd1;
-                if (key_press[15])
-                    debug_single <= ~debug_single;
-                if (key_press[14])
-                    probe_m0 <= ~probe_m0;
             end
         end
     end

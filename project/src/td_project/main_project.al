@@ -61,8 +61,8 @@
             <File Path="../user_source/hdl_source/SD/ax_debounce.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="7"/>
                 </FileInfo>
@@ -281,8 +281,8 @@
             <File Path="../user_source/hdl_source/SD/frame_fifo_read_arb.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="39"/>
                 </FileInfo>
@@ -290,8 +290,8 @@
             <File Path="../user_source/hdl_source/SD/frame_read_write_dual.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="40"/>
                 </FileInfo>
@@ -299,8 +299,8 @@
             <File Path="../user_source/hdl_source/SD/rd_arbiter.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="41"/>
                 </FileInfo>
@@ -316,8 +316,8 @@
             <File Path="../user_source/hdl_source/control/startup_pulse.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="43"/>
                 </FileInfo>
@@ -341,8 +341,8 @@
             <File Path="../user_source/hdl_source/SD/sdram_selftest.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="47"/>
                 </FileInfo>
@@ -446,8 +446,8 @@
             <File Path="../sim/base_stubs.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="54"/>
                 </FileInfo>
@@ -455,8 +455,8 @@
             <File Path="../sim/sdram_bhv.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="56"/>
                 </FileInfo>
@@ -464,8 +464,8 @@
             <File Path="../sim/tb_audio.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="58"/>
                 </FileInfo>
@@ -473,8 +473,8 @@
             <File Path="../sim/tb_fb_dual.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="60"/>
                 </FileInfo>
@@ -482,8 +482,8 @@
             <File Path="../sim/tb_osd.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="62"/>
                 </FileInfo>
@@ -491,8 +491,8 @@
             <File Path="../sim/tb_param_latch.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="64"/>
                 </FileInfo>
@@ -500,8 +500,8 @@
             <File Path="../sim/tb_regs.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="65"/>
                 </FileInfo>
@@ -509,8 +509,8 @@
             <File Path="../sim/tb_selftest.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="66"/>
                 </FileInfo>
@@ -518,8 +518,8 @@
             <File Path="../sim/tb_timing.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="67"/>
                 </FileInfo>
@@ -527,8 +527,8 @@
             <File Path="../sim/tb_video_proc.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="68"/>
                 </FileInfo>
@@ -552,8 +552,8 @@
             <File Path="../sim/tb_chain.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="71"/>
                 </FileInfo>
@@ -561,8 +561,8 @@
             <File Path="../sim/tb_disp_ctrl.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="72"/>
                 </FileInfo>
@@ -570,8 +570,8 @@
             <File Path="../sim/tb_line_buffer.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="73"/>
                 </FileInfo>
@@ -579,8 +579,8 @@
             <File Path="../sim/tb_line_read.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="74"/>
                 </FileInfo>
@@ -588,8 +588,8 @@
             <File Path="../sim/tb_line_sched.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="75"/>
                 </FileInfo>
@@ -597,8 +597,8 @@
             <File Path="../sim/tb_logo_overlay.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="76"/>
                 </FileInfo>
@@ -606,8 +606,8 @@
             <File Path="../sim/tb_mixer.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="77"/>
                 </FileInfo>
@@ -631,8 +631,8 @@
             <File Path="../sim/tb_scroll_text.v">
                 <FileInfo>
                     <Attr Name="AutoExcluded" Val="true"/>
-                    <Attr Name="UsedInSyn" Val="true"/>
-                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="false"/>
+                    <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="80"/>
                 </FileInfo>

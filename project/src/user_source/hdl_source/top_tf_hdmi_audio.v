@@ -39,12 +39,12 @@
 //   sys_pll / video_pll / PLL_HDMI_AUDIO        三个时钟 PLL
 //   reset_sync ×6                               每域复位同步
 //   keyboard_scan / key_filter                  键盘扫描与消抖
-//   sd_card_bmp                                 SD + FAT32 + BMP + 双缓冲调度
+//   sd_card_bmp                                 SD + FAT32 + BMP + 4 槽预载调度
 //   video_timing_data / video_pos               视频时序、行计数与像素坐标
 //   line_sched / frame_line_read                提前一行取 A/B
 //   line_buffer ×2 / mixer                      A/B 乒乓行缓冲与溶解/滑动
 //   disp_ctrl                                   当前槽/目标槽/转场进度
-//   video_post                                  亮度/对比度 + 参数 OSD + Logo 图层（M2）
+//   video_post                                  参数锁存 + 亮度/对比度 + OSD + Logo
 //   test_pattern_640x480                        无图/首行未就绪时的彩条回退
 //   frame_read_write                            帧缓存写侧（仅开机预载）
 //   sdr_refresh_sweep                           消隐期顺序扫描，保持闲置槽
@@ -59,8 +59,8 @@
 // 备注：
 //   - 本板无 DDC/EDID，I_edid_read_trig 恒 0。
 //   - M2 起 A/B 每行都取；空闲时 next_idx=cur_idx，B 行与 A 行相同。
-//   - 调试用的 SDRAM 自检 / 总线开关已在 M1 封档时移除（源码保留在 SD/sdram_selftest.v）。
-//   - frame_read_write_dual 等双读源码保留在仓库中，但顶层不例化。
+//   - 调试用的 SDRAM 自检 / 总线开关已在 M1 封档时移除（源码保留，`.al` 中 UsedInSyn=false）。
+//   - frame_read_write_dual 等双读源码保留在仓库中，但顶层不例化、不参与综合。
 //=============================================================================
 `timescale 1ns / 1ps
 
@@ -270,7 +270,7 @@ module top(
     wire [11:0] v_cnt;
     wire        hs, vs, de;
     wire [23:0] post_rgb;
-    wire [23:0] vout_data_raw;
+    wire [23:0] src_rgb;
     wire [23:0] vout_data;
     wire [9:0]  pix_x, pix_y;
     wire        vs_fall;
@@ -395,22 +395,21 @@ module top(
     assign vs = post_vs_v;
     assign de = post_de_v;
 
-    assign vout_data_raw = post_rgb;
-
     // 无图时输出彩条（诊断：有彩条=HDMI 链路 OK，问题在 SD/BMP）
+    // 用 post_vs/post_de 计数，彩条随后也经过 video_post（亮度/对比度/OSD 同样生效）
     wire [23:0] test_rgb;
     test_pattern_640x480 u_test_pattern (
         .clk (video_clk),
         .rst (rst_vid),
-        .vs  (vs),
-        .de  (de),
+        .vs  (post_vs),
+        .de  (post_de),
         .rgb (test_rgb)
     );
 
     // display_valid 来自 100MHz 域，2FF 同步后再参与视频选择
     // （disp_valid_sync / display_valid_v 已在视频时序段声明）
 
-    // 显示源在行缓冲输出之后选择（见下方 vout_data）
+    // 显示源在 video_post 之前选择（见上方 src_rgb 赋值）
 
     //-------------------------------------------------------------------------
     // 帧缓存：写侧仍由 frame_read_write 负责（仅开机预载）
@@ -487,6 +486,10 @@ module top(
             frame_ready_sync <= {frame_ready_sync[0], frame_ready_mem};
     end
     wire frame_ready_v = frame_ready_sync[1];
+
+    // 源选择放在 video_post 之前：彩条同样经过亮度/对比度与 OSD/Logo，
+    // 拔卡也能演示参数面板与 Logo
+    assign src_rgb = (display_valid_v && frame_ready_v) ? mix_rgb : test_rgb;
 
     //-------------------------------------------------------------------------
     // 帧缓存写侧：仅开机预载使用；读侧全部交给 frame_line_read
@@ -581,7 +584,8 @@ module top(
     assign App_rd_en   = sweep_active ? sweep_en   : line_rd_en;
     assign App_rd_addr = sweep_active ? sweep_addr : line_rd_addr;
 
-    assign vout_data = (display_valid_v && frame_ready_v) ? vout_data_raw : test_rgb;
+    // 源选择已提前到 video_post 之前，这里直接用后处理输出
+    assign vout_data = post_rgb;
 
     sdram u_sdram (
         .Clk              (ext_mem_clk),
@@ -754,7 +758,6 @@ module top(
     wire [7:0]  regs_time_ss;
     wire        regs_tick_1hz;
     wire [31:0] regs_seg_value;
-    wire [15:0] regs_key_press;
 
     regs u_regs (
         .clk          (clk),
@@ -775,7 +778,7 @@ module top(
         .time_ss      (regs_time_ss),
         .tick_1hz     (regs_tick_1hz),
         .seg_value    (regs_seg_value),
-        .key_press    (regs_key_press)
+        .key_press    ()
     );
 
     //-------------------------------------------------------------------------
@@ -809,7 +812,7 @@ module top(
     video_post u_video_post (
         .clk        (video_clk),
         .rst        (rst_vid),
-        .rgb_in     (mix_rgb),
+        .rgb_in     (src_rgb),
         .hs_in      (post_hs),
         .vs_in      (post_vs),
         .de_in      (post_de),

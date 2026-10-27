@@ -1,9 +1,9 @@
 # 主工程源码说明（`project/src/`）
 
 > 本目录是 **M0/M1/M2 唯一主线工程**，由 `legacy/hdmi_test_base/` 全量迁入，并按 `video/ audio/ hdmi/ control/` 归档自研模块。
-> 功能：TF 卡 640×480 BMP → SDRAM 4 槽预载（运行期只读）→ 按行取 A/B → 行缓冲/溶解/滑动 → **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
+> 功能：TF 卡 640×480 BMP → SDRAM 4 槽预载（运行期只读）→ 按行取 A/B → 行缓冲/溶解/滑动 → 亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕 → **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
 > 官方基线：`lab_ex5_i2s`（APUG092 HDMI 1.4b + SD/）。
-> 模块包含关系图：`../doc/模块层次图.svg`（谁例化了谁）；每个模块的功能/接口见对应 `.v` 顶部注释。
+> 模块包含关系图：`../doc/模块层次图.svg`（M1 基线；M2 增量见 `../doc/框架说明.md` §2.2）；每个模块的功能/接口见对应 `.v` 顶部注释。
 
 ---
 
@@ -34,15 +34,15 @@ project/src/
 │   │   ├── top_tf_hdmi_audio.v    # 顶层
 │   │   ├── SD/                    # SD/BMP + frame_read_write + sdr_refresh_sweep + sdram（含未综合的双读实验源码）
 │   │   ├── include/               # global_def.v + sdr_as_ram / sdr_init_ref / sdr_wrrd 加密核（位置固定）
-│   │   ├── video/                 # test_pattern / video_rgb_to_axis（M2 增 transition/video_proc/osd）
+│   │   ├── video/                 # 行读取/行缓冲/mixer/video_post/video_proc/OSD/Logo
 │   │   ├── audio/                 # L1 测试音 / I2S_receiver / ACR（M3 增 synth_player/audio_viz）
 │   │   ├── hdmi/                  # HDMI 1.4b 加密核（黑盒）+ PHY + 10:1 串行化
-│   │   ├── control/               # keyboard_scan / key_filter / seg_led*
+│   │   ├── control/               # keyboard_scan / key_filter / regs / seg_led* / reset_sync
 │   │   └── ip/                    # sys_pll / video_pll / afifo（TD IP）
 │   └── constraints_source/
 │       ├── pin.adc                # 本板引脚
 │       └── timing.sdc             # 时钟约束
-├── sim/                           # iverilog 语法检查 + 时序/音频 tb
+├── sim/                           # iverilog 语法检查 + 全部 M0–M2 testbench（fail-fast）
 └── tools/                         # BMP 生成/检查 + 输出图
 ```
 
@@ -95,7 +95,7 @@ project/src/
 - 4×4 矩阵：`kb_row=D9/F9/C10/E10`，`kb_col=E11/D11/C11/F10`
 - `key_deb[0]`（第 4 行第 1 列）= **下一张**：只切换显示槽（瞬间完成，不加载）
 - `key_deb[1]`（第 4 行第 2 列）= **自动轮播开关**（同样只切换槽）
-- 其余按键：参数寄存器（亮度/对比度/转场/OSD/音源/可视化），M2/M3 使用；K11 参数复位
+- 其余按键：K3 转场模式、K4 OSD/Logo 开关、K5/K6 亮度 ±8、K7/K8 对比度 ±16、K12 参数复位、K13 滚动字幕开关（K9–K11 预留给 M3）
 - 数码管（4 位，高位在左）：`[SD状态码][图片序号][转场/OSD][音源/可视化]`
 - LED：
   - `led[0]` 音频 PLL 锁定
@@ -115,7 +115,7 @@ project/src/
 2. 根目录放 **`01.bmp`…`04.bmp`**（640×480、24bit、非压缩，文件连续）；
 3. HDMI 接 **带喇叭/音频输出** 的显示器或电视；
 4. TD 打开 `main_project.al` → 综合 → 布局布线 → 下载；
-5. 上电后：首图显示 + 测试音（do/re/mi…）；`key1` 切下一张，`key2` 开关自动轮播（1Hz）。
+5. 上电后：首图显示 + 测试音（do/re/mi…）；`key1` 切下一张，`key2` 开关自动轮播（周期 4s）；右上角参数面板、左上角 Logo、底部滚动字幕默认显示。
 
 ---
 
@@ -127,7 +127,10 @@ project/src/
 | 音频 | 音阶测试音，循环 |
 | 上电 | 约 1.2s 彩条（预载 4 张图），随后显示第 1 张 |
 | 切图 | key1 **瞬间**切换到下一槽（无加载、无彩条） |
-| 轮播 | key2 开启后 1Hz 切换（只改槽号） |
+| 轮播 | key2 开启后 4s 切换（只改槽号） |
+| 参数 OSD | 右上角两行：TIME/IMG/BRT/CNT/TR；K4 开关 |
+| 滚动字幕 | 底部白底红字 11 字循环；K13 开关 |
+| Logo | 左上角 32×32，与 OSD 同步开关 |
 | 数码管 | `[SD状态][图片号][转场/OSD][音源/可视化]` |
 
 ---
@@ -219,7 +222,7 @@ M2 读路径已从“整帧 FIFO”改为“按行 A/B”：
 SDRAM → frame_line_read（每行 640 A + 640 B，计满 1280 个返回）
       → line_buffer A/B（各 2 bank，640×24 乒乓）
       → mixer（溶解 / 水平滑动）
-      → video_post（亮度/对比度/OSD 挂载点，当前直通）
+      → video_post（video_proc 亮度/对比度 + 参数 OSD + Logo + 滚动字幕）
       → AXIS → HDMI
 ```
 
@@ -227,11 +230,38 @@ SDRAM → frame_line_read（每行 640 A + 640 B，计满 1280 个返回）
 - `frame_line_read`：A/B 各 640 字连续读，按 `Sdr_rd_en` 返回计数写行缓冲，杜绝行尾串道；
 - `disp_ctrl`：`cur_idx/next_idx` 在 vs 锁存，64 帧（≈1.07s）完成一次转场；K3=0 溶解、1 滑动、2 直切；
 - 后台扫描：最后一行取完后启动，下一帧首行预取前停止；停止后 `sdr_refresh_sweep` 保持 16 拍排空；
-- 当前 bit：`project/out/main_project_m2_mixer.bit`（OSD/亮度仍为直通，队友后续接入 `video_post`）。
+- M2 行缓冲/转场 bit：`project/out/main_project_m2_mixer.bit`（完整版见 §6.7）。
 
 > **上板踩坑**：`frame_line_read` 最初在 `Sdr_busy` 时暂停发命令，一行 1280 字被拆成不连续小段，控制器返回节奏变化导致行内像素错位（纵向梳齿/短横虚线）。改为连续发完整 1280 个读命令后修复；与 M1 `frame_fifo_read` 的做法一致。
 
 > 注意：自动轮播间隔已从 1s 改为 4s（`sd_card_bmp.AUTO_PERIOD_S=4`），否则 1s 转场会连续不断。
+
+### 6.7 M2 亮度/对比度 + 参数 OSD + Logo（已实现，待上板复测）
+
+- `video_proc`：24-bit 三通道 `clamp((c-128)*contrast/128 + 128 + brightness, 0, 255)`，2 级流水；亮度 -64..+64（K5/K6），对比度 64..192（K7/K8，128 = 1.0x）；
+- `video_param_latch`：38-bit 参数总线 2FF + 连续 8 拍稳定检测 + vs 下降沿整组锁存，避免多位中间码；
+- `osd_composer` + `font_ascii_8x16`：右上角 160×34 面板：
+
+  ```text
+  TIME 00:00 IMG:1/4
+  BRT:+00 CNT:128 TR:0
+  ```
+
+  字形纯白，非字形像素每通道 >>1（半透明黑底），面板外/行间空隙直通；
+- `logo_overlay` + `logo_data_32x32`：左上角 32×32 Logo（RGB555 + 1bit opaque），透明区逐位直通；
+- K4 同时开关参数面板与 Logo；OSD 默认开启；
+- 源选择提前到 `video_post` 之前：无图彩条也会叠加亮度/OSD/Logo；
+- 该阶段 bit：`project/out/main_project_m2_osd.bit`（无字幕版，Setup +0.346ns / Hold +0.011ns）。
+
+### 6.8 M2 底部中文滚动字幕（已实现，待上板复测）
+
+- `scroll_text_overlay`：底部 `y=444..467` 白底横幅，16×16 红字位于 `y=448..463`；纯组合，0 拍；
+- 文案：`逐逻辑而行，赴创新之约` 共 **11 字**（`gen_cn_font_v.py` 生成，支持 1~16 字）；
+- `font_cn_16x16`：11×16×16 = 2,816 bit，组合 LUT ROM，**0 BRAM**；
+- 滚动：vs 下降沿 `pos-1`（1px/帧 ≈ 59.5px/s），整条 880px 循环约 14.8s；关闭时冻结；
+- 开关：**K13**，与 K4（参数面板/Logo）独立，默认开；
+- 当前完整版 bit：`project/out/main_project_m2_scroll.bit`
+  （Setup +0.508ns / Hold +0.003ns；LUT 5,082、REG 4,212、BRAM9K 28、DSP 3）。
 
 
 ---
@@ -244,7 +274,7 @@ powershell -ExecutionPolicy Bypass -File sim/run_syntax.ps1
 powershell -ExecutionPolicy Bypass -File sim/run_sim.ps1
 ```
 
-> 需要 `D:\iverilog\bin\iverilog.exe`；加密核/PLL/SDRAM 用 `sim/base_stubs.v` 空壳替代。
+> 需要 `D:\iverilog\bin\iverilog.exe`；加密核/PLL/SDRAM 用 `sim/base_stubs.v` 空壳替代（脚本自动加 `-D SIM_STUBS`）。`run_sim.ps1` 在编译失败、仿真非零退出或 testbench 打印 `FAIL/TIMEOUT/ERR` 时立即终止，避免假通过。
 
 | 验证 | 方法 | 结果 |
 |:--|:--|:--|
@@ -259,13 +289,21 @@ powershell -ExecutionPolicy Bypass -File sim/run_sim.ps1
 | M2 行调度 | `sim/tb_line_sched.v` | ✅ 44 预取、480 次 toggle |
 | M2 行缓冲 | `sim/tb_line_buffer.v` | ✅ 双时钟 2048 字读写 |
 | M2 视频链路 | `sim/tb_chain.v` | ✅ 480 行/帧、A→B 溶解后输出切换 |
-| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.544ns / Hold WNS +0.003ns，0 失败端点**；LUT 4,216（21.51%）、REG 3,873、BRAM9K 28、DSP 2 |
+| M2 亮度/对比度 | `sim/tb_video_proc.v` | ✅ 86 项，含 ±64 / 64/192 饱和 |
+| M2 参数跨域 | `sim/tb_param_latch.v` | ✅ 9 项：稳定检测、vs 锁存、字符码 |
+| M2 参数 OSD | `sim/tb_osd.v` | ✅ 37,527 项：面板坐标/字形/直通区 |
+| M2 Logo | `sim/tb_logo_overlay.v` | ✅ 13,834 项：透明区直通、像素映射 |
+| M2 滚动字幕 | `sim/tb_scroll_text.v` | ✅ 209 项：字库/位置/滚动/颜色/回绕 |
+| M2 后处理集成 | `sim/tb_video_post.v` | ✅ 20 项：OSD 关断逐像素直通 + 2 拍边带 |
+| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.508ns / Hold WNS +0.003ns，0 失败端点**；LUT 5,082（25.93%）、REG 4,212、BRAM9K 28、DSP 3 |
+
+> 说明：`tb_chain` 跑 9 个完整帧（约 151ms 仿真时间），iverilog 下约 4–5 分钟，属正常现象；其余 testbench 秒级完成。
 
 ---
 
 ## 8. 后续演进（M1–M4）
 
 - **M1（已完成并封档，tag `m1-final`；噪点修复 tag `m1-patch`）**：**4 槽预载 + 运行期只读**；顶层只例化 `frame_read_write`（1 写 1 读）；双读源码保留但不参与综合；`video_delay` 双 RGB + `x/y`；`control/regs` 16 键/1Hz/数码管；`sdr_refresh_sweep` 消隐期顺序扫描 4 槽；
-- **M2（行缓冲/转场已上板验证）**：`frame_line_read` + 2-bank 行缓冲 + `mixer`（溶解/滑动）+ `disp_ctrl`；亮度/对比度/OSD 留在 `video_post` 由队友接入；
+- **M2（行缓冲/转场/亮度/OSD/Logo/字幕已完成；字幕版待复测）**：`frame_line_read` + 2-bank 行缓冲 + `mixer`（溶解/滑动）+ `disp_ctrl` + `video_post`（亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕）；
 - **M3**：L2 多谐波/双音伴奏波表合成 `synth_player` + `audio_viz`（声波曲线 + 8 段频谱）；
 - **M4**：`timing.sdc` 最终复测、QSPI 固化、2h 烤机（复位同步/写 FSM 打拍已在 M1 完成）。
