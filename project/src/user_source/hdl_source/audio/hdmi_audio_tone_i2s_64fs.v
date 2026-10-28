@@ -28,6 +28,10 @@ module hdmi_audio_tone_i2s_64fs #(
 )(
     input  wire I_mclk,      // 12.288MHz
     input  wire I_rst,
+    // M3 扩展⑤：外接音源（synth_player）。I_use_ext=1 时发送 I_ext_sample，
+    // 为 0 时发送内部音阶方波 → 相当于在 I2S 串行器前面做了一个 2 选 1。
+    input  wire I_use_ext,
+    input  wire signed [23:0] I_ext_sample,
     output reg  O_i2s_BCLK,
     output reg  O_i2s_LRCK,
     output reg  O_i2s_DOUT
@@ -95,8 +99,10 @@ always @(posedge I_mclk or posedge I_rst) begin
                     O_i2s_LRCK  <= 1'b0;
 
                     S_phase_acc <= S_phase_acc + W_note_inc;
-                    if (S_phase_acc[31])
-                        S_sample_next <= AMP;
+                    if (I_use_ext)
+                        S_sample_next <= I_ext_sample;      // L2：并行合成样本
+                    else if (S_phase_acc[31])
+                        S_sample_next <= AMP;               // L1：内部方波音阶
                     else
                         S_sample_next <= -AMP;
 

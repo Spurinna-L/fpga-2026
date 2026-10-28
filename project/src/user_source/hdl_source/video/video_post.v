@@ -4,13 +4,16 @@
 //-----------------------------------------------------------------------------
 // 本版已完成 M2 扩展④：实时亮度/对比度 + 参数 OSD 字符面板 + 左上角 Logo 图层。
 // 扩展⑤：底部中文滚动字幕（scroll_text_overlay，K13 开关）。
-// 链路：rgb_in → video_proc（2 拍）→ osd_composer（组合）→ logo_overlay（组合）
-//        → scroll_text_overlay（组合）→ rgb_out
+// M3 扩展⑤：音频可视化图层 audio_viz（波形 + 8 段频谱柱，K11 循环 0..3）。
+// 链路：rgb_in → video_proc（2 拍）→ audio_viz（1 拍）→ osd_composer（组合）
+//        → logo_overlay（组合）→ scroll_text_overlay（组合）→ rgb_out
 //   - 输入 rgb_in/hs_in/vs_in/de_in/x_in/y_in 已与 mixer 输出严格同拍；
-//   - 输出 rgb_out/hs_out/vs_out/de_out/x_out/y_out 与输入相差 2 拍；
-//   - hs/vs 在模块内一起延迟 2 拍，与 de/x/y/rgb 保持同拍；
+//   - 输出 rgb_out/hs_out/vs_out/de_out/x_out/y_out 与输入相差 3 拍；
+//   - hs/vs 在模块内一起延迟 3 拍，与 de/x/y/rgb 保持同拍；
+//   - audio_viz 之所以是 1 拍：波形 RAM 读延迟 1 拍，模块内部把 de/x/y/rgb
+//     一起再打一拍，输出端仍然严格同拍；viz_mode=0 时它只是纯延迟，画面不变。
 //   - osd_composer / logo_overlay / scroll_text_overlay 都是**纯组合**（0 拍），
-//     所以这些叠加级不改变上面的 2 拍对齐关系，对帧缓存/行缓冲/转场完全无影响。
+//     所以这些叠加级不改变上面的对齐关系，对帧缓存/行缓冲/转场完全无影响。
 //
 // 开关策略：右上角参数面板与左上角 Logo **共用同一个开关**（K4 → osd_en）。
 //   logo_overlay 用的也是 prm_osd_en（而不是原始 osd_en），好处：
@@ -40,6 +43,10 @@ module video_post (
     input  wire [1:0]        img_idx,
     input  wire [1:0]        trans_mode,
     input  wire [1:0]        audio_src,
+    input  wire [1:0]        audio_timbre,  // 合成器音色（K10），仅 OSD 回显
+    input  wire [1:0]        viz_mode,      // 音频可视化模式（K11）
+    input  wire              audio_valid,   // 48kHz 音频样本有效（I2S 解串）
+    input  wire signed [23:0] audio_sample, // 24bit 有符号 PCM
 
     output wire [23:0] rgb_out,
     output wire        hs_out,
@@ -58,12 +65,12 @@ module video_post (
     wire              prm_osd_en;
     wire              prm_subtitle_en;
     wire [1:0]        prm_trans_mode;
+    wire [1:0]        prm_viz_mode;
 
     wire [4:0] ch_brt_sign, ch_brt_hi, ch_brt_lo;
     wire [4:0] ch_cnt_h, ch_cnt_m, ch_cnt_l;
     wire [4:0] ch_mm_hi, ch_mm_lo, ch_ss_hi, ch_ss_lo;
     wire [4:0] ch_img, ch_tr;
-
     video_param_latch u_prm (
         .I_clk        (clk),
         .I_rst        (rst),
@@ -73,6 +80,7 @@ module video_post (
         .I_osd_en     (osd_en),
         .I_subtitle_en(subtitle_en),
         .I_trans_mode (trans_mode),
+        .I_viz_mode   (viz_mode),
         .I_img_idx    (img_idx),
         .I_time_mm    (time_mm),
         .I_time_ss    (time_ss),
@@ -81,6 +89,7 @@ module video_post (
         .O_osd_en     (prm_osd_en),
         .O_subtitle_en(prm_subtitle_en),
         .O_trans_mode (prm_trans_mode),
+        .O_viz_mode   (prm_viz_mode),
         .O_ch_brt_sign(ch_brt_sign),
         .O_ch_brt_hi  (ch_brt_hi),
         .O_ch_brt_lo  (ch_brt_lo),
@@ -119,17 +128,44 @@ module video_post (
     );
 
     //-------------------------------------------------------------------------
-    // ③ 参数 OSD（组合叠加，右上角两行字符面板）
+    // ③ 音频可视化（M3 扩展⑤）：波形 + 8 段频谱柱
+    //    插在亮度/对比度之后、OSD 之前；模块内部对像素流水再多打 1 拍
+    //    （波形 RAM 读延迟 1 拍），因此这一级是 **1 拍**，不是 0 拍。
+    //    viz_mode = 0 时整级直通，画面与 M2 基线逐像素一致。
+    //-------------------------------------------------------------------------
+    wire        viz_de;
+    wire [9:0]  viz_x, viz_y;
+    wire [23:0] viz_rgb;
+
+    audio_viz u_viz (
+        .I_clk        (clk),
+        .I_rst        (rst),
+        .I_vs         (vs_in),
+        .I_mode       (prm_viz_mode),
+        .I_samp_valid (audio_valid),
+        .I_samp       (audio_sample),
+        .I_de         (proc_de),
+        .I_x          (proc_x),
+        .I_y          (proc_y),
+        .I_rgb        (proc_rgb),
+        .O_de         (viz_de),
+        .O_x          (viz_x),
+        .O_y          (viz_y),
+        .O_rgb        (viz_rgb)
+    );
+
+    //-------------------------------------------------------------------------
+    // ④ 参数 OSD（组合叠加，右上角两行字符面板）
     //-------------------------------------------------------------------------
     wire        osd_de;
     wire [9:0]  osd_x, osd_y;
     wire [23:0] osd_rgb;
 
     osd_composer u_osd (
-        .I_de       (proc_de),
-        .I_x        (proc_x),
-        .I_y        (proc_y),
-        .I_rgb      (proc_rgb),
+        .I_de       (viz_de),
+        .I_x        (viz_x),
+        .I_y        (viz_y),
+        .I_rgb      (viz_rgb),
         .I_en       (prm_osd_en),
         .I_brt_sign (ch_brt_sign),
         .I_brt_hi   (ch_brt_hi),
@@ -143,6 +179,9 @@ module video_post (
         .I_ss_lo    (ch_ss_lo),
         .I_img      (ch_img),
         .I_tr       (ch_tr),
+        .I_viz_mode ({3'b000, prm_viz_mode}),
+        .I_timbre   ({3'b000, audio_timbre}),
+        .I_audio_src({3'b000, audio_src}),
         .O_de       (osd_de),
         .O_x        (osd_x),
         .O_y        (osd_y),
@@ -150,7 +189,7 @@ module video_post (
     );
 
     //-------------------------------------------------------------------------
-    // ④ 左上角 Logo 水印图层（组合叠加，0 拍；不影响原图与转场）
+    // ⑤ 左上角 Logo 水印图层（组合叠加，0 拍；不影响原图与转场）
     //    开关与右上角参数面板共用 prm_osd_en：同一帧边界同时出现/消失
     //-------------------------------------------------------------------------
     wire        lg_de;
@@ -170,7 +209,7 @@ module video_post (
     );
 
     //-------------------------------------------------------------------------
-    // ⑤ 底部中文滚动字幕（纯组合叠加，0 拍；K13 独立开关）
+    // ⑥ 底部中文滚动字幕（纯组合叠加，0 拍；K13 独立开关）
     //    位置在模块内部按 vs 帧边界更新，开关同样经过帧边界同步，
     //    因此打开/关闭时不会出现半帧错位。关闭时滚动暂停。
     //-------------------------------------------------------------------------
@@ -194,20 +233,24 @@ module video_post (
     );
 
     //-------------------------------------------------------------------------
-    // ⑥ hs/vs 跟随 video_proc 的 2 拍延迟，保证全部边带同拍
+    // ⑦ hs/vs 跟随 video_proc(2 拍) + audio_viz(1 拍) = 3 拍延迟，保证全部边带同拍
     //-------------------------------------------------------------------------
-    reg hs_d1, hs_d2, vs_d1, vs_d2;
+    reg hs_d1, hs_d2, hs_d3, vs_d1, vs_d2, vs_d3;
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             hs_d1 <= 1'b1;
             hs_d2 <= 1'b1;
+            hs_d3 <= 1'b1;
             vs_d1 <= 1'b1;
             vs_d2 <= 1'b1;
+            vs_d3 <= 1'b1;
         end else begin
             hs_d1 <= hs_in;
             hs_d2 <= hs_d1;
+            hs_d3 <= hs_d2;
             vs_d1 <= vs_in;
             vs_d2 <= vs_d1;
+            vs_d3 <= vs_d2;
         end
     end
 
@@ -215,7 +258,7 @@ module video_post (
     assign de_out  = st_de;
     assign x_out   = st_x;
     assign y_out   = st_y;
-    assign hs_out  = hs_d2;
-    assign vs_out  = vs_d2;
+    assign hs_out  = hs_d3;
+    assign vs_out  = vs_d3;
 
 endmodule

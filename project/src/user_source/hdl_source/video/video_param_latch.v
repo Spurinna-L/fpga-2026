@@ -24,12 +24,13 @@
 //   I_osd_en                   OSD 总开关
 //   I_subtitle_en             底部滚动字幕开关（K13）
 //   I_trans_mode[1:0]          转场模式 0..2
+//   I_viz_mode[1:0]            音频可视化模式 0..3（bit0 波形 / bit1 频谱柱）
 //   I_img_idx[1:0]             当前图片序号 0..3
 //   I_time_mm / I_time_ss[7:0] 上电计时
 //
 // 输出（像素域，帧内恒定）：
 //   O_brightness / O_contrast / O_osd_en / O_subtitle_en / O_trans_mode
-//                              原样供 video_proc / 字幕图层使用
+//   O_viz_mode                 原样供 video_proc / audio_viz / 字幕图层使用
 //   O_ch_*[4:0]                 OSD 字符码（见 font_ascii_8x16.v 码表）
 //
 // 字符码约定（与 font_ascii_8x16.v 严格一致）：
@@ -62,6 +63,7 @@ module video_param_latch #(
     input  wire               I_osd_en,
     input  wire               I_subtitle_en,
     input  wire [1:0]         I_trans_mode,
+    input  wire [1:0]         I_viz_mode,
     input  wire [1:0]         I_img_idx,
     input  wire [7:0]         I_time_mm,
     input  wire [7:0]         I_time_ss,
@@ -72,6 +74,7 @@ module video_param_latch #(
     output reg                O_osd_en,
     output reg                O_subtitle_en,
     output reg  [1:0]         O_trans_mode,
+    output reg  [1:0]         O_viz_mode,
 
     // ---- OSD 字符码 ----
     output reg  [4:0]         O_ch_brt_sign,  // '+' 或 '-'
@@ -91,7 +94,8 @@ module video_param_latch #(
     //-------------------------------------------------------------------------
     // 参数总线打包（顺序固定，只用于「整体是否变化」的比较和整组锁存）
     //-------------------------------------------------------------------------
-    wire [37:0] prm_bus = {
+    wire [39:0] prm_bus = {
+        I_viz_mode,     // [39:38]
         I_brightness,   // [37:30]
         I_contrast,     // [29:22]
         I_osd_en,       // [21]
@@ -105,14 +109,14 @@ module video_param_latch #(
     //-------------------------------------------------------------------------
     // 2FF 同步 + 稳定检测
     //-------------------------------------------------------------------------
-    reg [37:0] sync0, sync1, sync1_d;
+    reg [39:0] sync0, sync1, sync1_d;
     reg [3:0]  stable_cnt;
 
     always @(posedge I_clk or posedge I_rst) begin
         if (I_rst) begin
-            sync0      <= 38'd0;
-            sync1      <= 38'd0;
-            sync1_d    <= 38'd0;
+            sync0      <= 40'd0;
+            sync1      <= 40'd0;
+            sync1_d    <= 40'd0;
             stable_cnt <= 4'd0;
         end else begin
             sync0   <= prm_bus;
@@ -148,6 +152,7 @@ module video_param_latch #(
     wire              en  = sync1[21];
     wire              sub = sync1[20];
     wire [1:0]        trm = sync1[19:18];
+    wire [1:0]        viz = sync1[39:38];
     wire [1:0]        img = sync1[17:16];
     wire [7:0]        mm  = sync1[15:8];
     wire [7:0]        ss  = sync1[7:0];
@@ -182,6 +187,7 @@ module video_param_latch #(
             O_osd_en     <= 1'b1;
             O_subtitle_en <= 1'b1;
             O_trans_mode <= 2'd0;
+            O_viz_mode   <= 2'd3;
 
             O_ch_brt_sign <= 5'd12;   // '+'
             O_ch_brt_hi   <= 5'd0;
@@ -201,6 +207,7 @@ module video_param_latch #(
             O_osd_en     <= en;
             O_subtitle_en <= sub;
             O_trans_mode <= trm;
+            O_viz_mode   <= viz;
 
             O_ch_brt_sign <= (br < 8'sd0) ? 5'd13 : 5'd12;   // '-' : '+'
             O_ch_brt_hi   <= {1'b0, br_hi};

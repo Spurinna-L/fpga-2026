@@ -41,10 +41,15 @@ set_clock_groups -exclusive \
 
 # ------------------------------------------------------------
 # 3. 音频 I2S 跨域
+#    audio_mclk 12.288MHz 与下列各域全部异步：
+#      video_clk    : I2S 解串（I2S_receiver 采样 audio 域产生的 BCLK/LRCK）
+#      clk 50MHz    : M3 新增 regs(audio_src/timbre) → synth_player 音源选择，
+#                     RTL 内已做 2FF 同步（aud_src_ff0/1、aud_timbre_ff0/1）
+#      hdmi_5x_clk / sd_card_clk / ext_mem_clk : 无直接路径，一并声明
 # ------------------------------------------------------------
 set_clock_groups -asynchronous \
     -group [get_clocks {audio_mclk}] \
-    -group [get_clocks {video_clk} hdmi_5x_clk sd_card_clk ext_mem_clk]
+    -group [get_clocks {clk video_clk hdmi_5x_clk sd_card_clk ext_mem_clk}]
 
 # ------------------------------------------------------------
 # 4. 存储/视频三大域：所有跨域均经异步 FIFO 或 2FF 同步器
