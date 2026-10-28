@@ -111,8 +111,8 @@ project/src/
 
 ## 4. 上板步骤
 
-1. TF 卡格式化为 **FAT32**；
-2. 根目录放 **`01.bmp`…`04.bmp`**（640×480、24bit、非压缩，文件连续）；
+1. 用 [`tools/README.md`](tools/README.md) 的工具链生成 `sd_card.img` 并写到物理卡（`bmp_convert → check_bmp → sd_pack → Win32DiskImager/balenaEtcher`）；
+2. M2 当前 bit 仍要求 **640×480、24bit、非压缩**；镜像内按参数顺序对应槽 0..3；
 3. HDMI 接 **带喇叭/音频输出** 的显示器或电视；
 4. TD 打开 `main_project.al` → 综合 → 布局布线 → 下载；
 5. 上电后：首图显示 + 测试音（do/re/mi…）；`key1` 切下一张，`key2` 开关自动轮播（周期 4s）；右上角参数面板、左上角 Logo、底部滚动字幕默认显示。
@@ -142,7 +142,7 @@ project/src/
 | 全黑 | `audio_pll_lock`、`por_done`、HDMI 核复位、显示器输入源 |
 | 有图无声 | 显示器音量/静音、HDMI 是否接对、`audio_valid` |
 | 花屏 | SDRAM 初始化、`ext_mem_clk`/`clk_sft`、时序约束 |
-| 读卡失败 | SD 引脚、FAT32、卡容量、`state_code` |
+| 读卡失败 | SD 引脚、镜像是否写对、图片是否连续、卡容量、`state_code` |
 | 图片错位/颜色错 | BMP 是否 640×480/24bit、`WRITE_V_FLIP` |
 | 无图但有彩条 | HDMI/PHY 正常，问题在 SD/BMP |
 

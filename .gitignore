@@ -28,6 +28,18 @@ hdmi_test/sim/*.bmp
 **/sim/*.out
 **/sim/*.bmp
 
+# SD 卡打包输出（体积大，不提交）
+project/src/tools/output_sd/
+project/src/tools/output_scale_bmp/
+project/src/tools/*.img
+project/src/tools/*.manifest.txt
+project/out/*.img
+project/out/*.manifest.txt
+
+# Python 缓存
+__pycache__/
+*.pyc
+
 # 临时文件和编辑器备份
 *.tmp
 *.bak

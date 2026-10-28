@@ -89,7 +89,7 @@ project/
 
 1. 使用 **Anlogic TD** 打开主线工程 `project/src/td_project/main_project.al`；
 2. 综合 → 布局布线 → 下载 `.bit`（或烧写 QSPI Flash）；
-3. TF 卡：格式化为 **FAT32**，根目录放入 `01.bmp`…`04.bmp`（640×480、24-bit RGB、非压缩）；
+3. TF 卡：用 [`src/tools/README.md`](src/tools/README.md) 的工具链生成 `sd_card.img` 并写到物理卡（`bmp_convert → check_bmp → sd_pack → Win32DiskImager/balenaEtcher`）；M2 当前 bit 仍要求 640×480、24-bit RGB、非压缩；
 4. HDMI 接带喇叭/音频输出的显示器；
 5. 上电约 1.2s 显示彩条后进入第 1 张图；K1 切图、K2 自动轮播（4s）、K3 切换溶解/滑动/直切、K4 开关 OSD/Logo、K5–K8 亮度/对比度、K12 复位、K13 开关滚动字幕。
 
