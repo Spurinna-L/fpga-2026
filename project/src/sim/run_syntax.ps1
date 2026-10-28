@@ -44,6 +44,7 @@ $files = @(
     "$h\hdmi\lane_lvds_10_1.v",
     "$h\SD\ax_debounce.v",
     "$h\SD\bmp_read.v",
+    "$h\SD\bmp_scale.v",
     "$h\SD\color_bar.v",
     "$h\SD\frame_fifo_read_arb.v",
     "$h\SD\frame_fifo_read.v",

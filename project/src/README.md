@@ -1,7 +1,7 @@
 # 主工程源码说明（`project/src/`）
 
 > 本目录是 **M0/M1/M2 唯一主线工程**，由 `legacy/hdmi_test_base/` 全量迁入，并按 `video/ audio/ hdmi/ control/` 归档自研模块。
-> 功能：TF 卡 640×480 BMP → SDRAM 4 槽预载（运行期只读）→ 按行取 A/B → 行缓冲/溶解/滑动 → 亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕 → **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
+> 功能：TF 卡 BMP（源图 160×120~1920×1080）→ `bmp_scale` 双线性适配 640×480 → SDRAM 4 槽预载（运行期只读）→ 按行取 A/B → 行缓冲/溶解/滑动 → 亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕 → **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
 > 官方基线：`lab_ex5_i2s`（APUG092 HDMI 1.4b + SD/）。
 > 模块包含关系图：`../doc/模块层次图.svg`（M1 基线；M2 增量见 `../doc/框架说明.md` §2.2）；每个模块的功能/接口见对应 `.v` 顶部注释。
 
@@ -32,7 +32,7 @@ project/src/
 ├── user_source/
 │   ├── hdl_source/
 │   │   ├── top_tf_hdmi_audio.v    # 顶层
-│   │   ├── SD/                    # SD/BMP + frame_read_write + sdr_refresh_sweep + sdram（含未综合的双读实验源码）
+│   │   ├── SD/                    # SD/BMP + bmp_scale + frame_read_write + sdr_refresh_sweep + sdram（含未综合的双读实验源码）
 │   │   ├── include/               # global_def.v + sdr_as_ram / sdr_init_ref / sdr_wrrd 加密核（位置固定）
 │   │   ├── video/                 # 行读取/行缓冲/mixer/video_post/video_proc/OSD/Logo
 │   │   ├── audio/                 # L1 测试音 / I2S_receiver / ACR（M3 增 synth_player/audio_viz）
@@ -112,10 +112,13 @@ project/src/
 ## 4. 上板步骤
 
 1. 用 [`tools/README.md`](tools/README.md) 的工具链生成 `sd_card.img` 并写到物理卡（`bmp_convert → check_bmp → sd_pack → Win32DiskImager/balenaEtcher`）；
-2. M2 当前 bit 仍要求 **640×480、24bit、非压缩**；镜像内按参数顺序对应槽 0..3；
-3. HDMI 接 **带喇叭/音频输出** 的显示器或电视；
-4. TD 打开 `main_project.al` → 综合 → 布局布线 → 下载；
-5. 上电后：首图显示 + 测试音（do/re/mi…）；`key1` 切下一张，`key2` 开关自动轮播（周期 4s）；右上角参数面板、左上角 Logo、底部滚动字幕默认显示。
+2. **bit 与图片规范要匹配**：`main_project_m3_scale.bit` 接受 **160×120~1920×1080、24bit、非压缩、bottom-up**（行填充自动跳过，保持比例 + 黑边）；`main_project_m2_scroll.bit` 仍只认 **640×480**（打包时加 `--strict-640x480`）；镜像内按参数顺序对应槽 0..3；
+3. 现成的 M3 上板镜像（4 张不同尺寸，已回读校验）：
+   - `project/out/sd_card_m3_a.img`：640×480（旁路）/ 160×120 / 1920×1080 / 540×960
+   - `project/out/sd_card_m3_b.img`：641×481（行填充）/ 1280×720 / 320×240 / 640×480
+4. HDMI 接 **带喇叭/音频输出** 的显示器或电视；
+5. TD 打开 `main_project.al` → 综合 → 布局布线 → 下载；
+6. 上电后：首图显示 + 测试音（do/re/mi…）；`key1` 切下一张，`key2` 开关自动轮播（周期 4s）；右上角参数面板、左上角 Logo、底部滚动字幕默认显示。
 
 ---
 
@@ -165,7 +168,7 @@ project/src/
 | 3 | 已找到 BMP，等写握手 | 查 `frame_read_write`/SDRAM 写口 |
 | 4 | 正在写像素 | 写路径卡住/帧未完成 |
 
-> `bmp_read` 匹配条件：**BM 头 + 640×480 + 24bit + compression=0**；top-down BMP 不匹配。
+> `bmp_read` 匹配条件：**BM 头 + 24bit + compression=0 + 正高度 + 宽高 ≤1920×1080**；top-down BMP 不匹配。行填充由 `bmp_read` 跳过，`bmp_scale` 输出固定 640×480。
 
 ### 6.3 SDRAM 自检工具（源码保留，不参与综合）
 
@@ -305,5 +308,5 @@ powershell -ExecutionPolicy Bypass -File sim/run_sim.ps1
 
 - **M1（已完成并封档，tag `m1-final`；噪点修复 tag `m1-patch`）**：**4 槽预载 + 运行期只读**；顶层只例化 `frame_read_write`（1 写 1 读）；双读源码保留但不参与综合；`video_delay` 双 RGB + `x/y`；`control/regs` 16 键/1Hz/数码管；`sdr_refresh_sweep` 消隐期顺序扫描 4 槽；
 - **M2（行缓冲/转场/亮度/OSD/Logo/字幕已完成；字幕版待复测）**：`frame_line_read` + 2-bank 行缓冲 + `mixer`（溶解/滑动）+ `disp_ctrl` + `video_post`（亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕）；
-- **M3**：L2 多谐波/双音伴奏波表合成 `synth_player` + `audio_viz`（声波曲线 + 8 段频谱）；
+- **M3**：图片缩放 `bmp_read`/`bmp_scale`（已实现）+ L2 多谐波/双音伴奏波表合成 `synth_player` + `audio_viz`（声波曲线 + 8 段频谱）；
 - **M4**：`timing.sdc` 最终复测、QSPI 固化、2h 烤机（复位同步/写 FSM 打拍已在 M1 完成）。

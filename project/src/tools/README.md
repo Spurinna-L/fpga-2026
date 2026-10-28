@@ -15,19 +15,23 @@
 ```powershell
 cd D:\fpga_2026\project\src\tools
 
+# 0) 先确认板上 bit：
+#    main_project_m3_scale.bit → 支持 160×120~1920×1080（缩放）
+#    main_project_m2_scroll.bit → 只支持 640×480（必须加 --strict-640x480）
+
 # 1) 图片转 24-bit bottom-up BMP（把 input_images 换成你的素材目录）
 python bmp_convert.py input_images -o output_bmp
 
-# 2) 校验（M2 当前 bit 必须加 --strict-640x480）
-python check_bmp.py output_bmp --strict-640x480
+# 2) 校验（M3 缩放 bit 用默认范围；M2 bit 加 --strict-640x480）
+python check_bmp.py output_bmp
 
 # 3) 打包成 64MB 原始镜像
 python sd_pack.py output_bmp\00_bars.bmp output_bmp\01_gradient.bmp `
                   output_bmp\02_checker.bmp output_bmp\03_text.bmp `
-                  -o output_sd\sd_card.img --strict-640x480
+                  -o output_sd\sd_card.img --sha256
 
 # 4) 模拟 RTL 扫描，确认镜像能被识别
-python sd_verify.py output_sd\sd_card.img --expect 4 --strict-640x480
+python sd_verify.py output_sd\sd_card.img --expect 4
 
 # 5) 用 Win32DiskImager / balenaEtcher 写到物理 SD 卡
 #    注意：写到 PhysicalDrive，不是 D:/E: 盘符
@@ -55,7 +59,7 @@ python sd_verify.py output_sd\sd_card.img --expect 4 --strict-640x480
 
 ## 3. BMP 硬性规范
 
-| 项 | M2 当前 bit | M3 缩放目标 |
+| 项 | M2 bit（`m2_scroll`） | M3 bit（`m3_scale`） |
 |:--|:--|:--|
 | 分辨率 | **640×480** | **160×120 ~ 1920×1080** |
 | 输出到屏幕 | 640×480 | 640×480（RTL 缩放 + 黑边） |
@@ -74,8 +78,9 @@ python sd_verify.py output_sd\sd_card.img --expect 4 --strict-640x480
 - top-down（高度为负）BMP；
 - 超过 1920×1080 的源图（先缩小）。
 
-> M2 的 `bmp_read.v` 仍然硬匹配 `width==640 && height==480`；
-> 在 M3 缩放 RTL 合入前，所有检查/打包命令都要加 `--strict-640x480`。
+> `main_project_m3_scale.bit` 的 `bmp_read.v` 只检查 **24bit / 非压缩 / 正高度 / 宽高 ≤1920×1080**，
+> 行填充由 RTL 跳过；`main_project_m2_scroll.bit` 仍硬匹配 `width==640 && height==480`，
+> 用 M2 bit 时所有检查/打包命令都要加 `--strict-640x480`。
 
 ---
 

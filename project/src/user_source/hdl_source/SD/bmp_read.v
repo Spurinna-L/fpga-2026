@@ -3,10 +3,14 @@
 //-----------------------------------------------------------------------------
 // 功能：
 //   1) 扫描模式（scan_start）：从 scan_start_sector 起逐扇区读取，用 54B
-//      文件头判断 "BM" + 宽高匹配 + 24bit + 不压缩，记录最多 4 张图的起始
-//      扇区；命中后按“文件长度向上取整的扇区数”跳读，未命中则 +1 扇区。
+//      文件头判断 "BM" + 24bit + 不压缩 + 正高度 + 宽高不超过上限，
+//      记录最多 4 张图的起始扇区；命中后按“文件长度向上取整的扇区数”跳读，
+//      未命中则 +1 扇区。
 //   2) 加载模式（load_start）：读文件头 → 发 write_req 给帧缓存（拿到 ack
-//      后从头重读数据区）→ 每 3 字节拼成 24bit 像素（BMP 为 BGR 小端）。
+//      后从头重读数据区）→ 每 3 字节拼成 24bit 像素（BMP 为 BGR 小端），
+//      跳过每行 4 字节对齐填充；输出源像素流给 bmp_scale。
+//   3) src_ready 反压：FIFO 高水位时在扇区边界暂停 sd_sec_read，
+//      避免小图放大/上下黑边时源像素被丢弃。
 //
 // 时钟/复位：clk = 100MHz；rst 高有效；sd_init_done=0 时强制回 IDLE。
 //
@@ -19,6 +23,8 @@
 //   SD：sd_sec_read / sd_sec_read_addr[31:0] / sd_sec_read_data[7:0] /
 //       sd_sec_read_data_valid / sd_sec_read_end
 //   输出：bmp_data_wr_en / bmp_data[23:0]（BGR→RGB 已交换）
+//         bmp_src_config / bmp_src_width / bmp_src_height / bmp_src_sop / bmp_src_eof
+//   输入：src_ready（bmp_scale FIFO 反压）
 //   状态：state_code[3:0]
 //
 // 常量：
@@ -65,7 +71,14 @@ module bmp_read(
     input                       sd_sec_read_end,
 
     output reg                  bmp_data_wr_en,
-    output reg [23:0]           bmp_data
+    output reg [23:0]           bmp_data,
+
+    input                       src_ready,     // 缩放 FIFO 未到高水位
+    output reg                  bmp_src_config,
+    output wire [15:0]          bmp_src_width,
+    output wire [15:0]          bmp_src_height,
+    output reg                  bmp_src_sop,
+    output reg                  bmp_src_eof
 );
 
 localparam ST_IDLE      = 3'd0;
@@ -91,6 +104,17 @@ reg [31:0] load_sector_latched;
 reg [31:0] bmp_len_cnt;
 reg [1:0]  bmp_byte_idx;
 
+reg [15:0] src_x, src_y;
+reg [15:0] row_byte_cnt;
+reg        load_pause;
+
+// 行字节数/stride 在文件头解析后寄存，避免每字节都走 width*3+对齐的长组合路径
+reg  [16:0] row_pixel_bytes_r;
+reg  [16:0] row_stride_r;
+
+assign bmp_src_width  = width[15:0];
+assign bmp_src_height = height[15:0];
+
 wire header_match;
 wire bmp_data_valid;
 wire [31:0] next_scan_sector_if_match;
@@ -108,10 +132,17 @@ always @(posedge clk or posedge rst) begin
 end
 
 assign ready = (state == ST_IDLE);
+// bmp_width/bmp_height 在缩放版里表示“允许的最大宽/高”（top 传 1920/1080）。
+// 只接受正高度（bottom-up）、24bit、非压缩；具体尺寸由 bmp_scale 适配。
 assign header_match = (header_0 == "B") &&
                       (header_1 == "M") &&
-                      (width[15:0]  == bmp_width) &&
-                      (height[15:0] == bmp_height) &&
+                      (width  != 32'd0) &&
+                      (height != 32'd0) &&
+                      (height[31] == 1'b0) &&
+                      (width[31:16] == 16'd0) &&
+                      (height[31:16] == 16'd0) &&
+                      (width[15:0]  <= bmp_width) &&
+                      (height[15:0] <= bmp_height) &&
                       (bit_count    == 16'd24) &&
                       (compression  == 32'd0);
 
@@ -126,7 +157,9 @@ always @(posedge clk or posedge rst) begin
 end
 assign bmp_data_valid = (sd_sec_read_data_valid == 1'b1) &&
                         (bmp_len_cnt >= pixel_offset) &&
-                        (bmp_len_cnt <  file_len);
+                        (bmp_len_cnt <  file_len) &&
+                        (src_y < height[15:0]) &&
+                        ({1'b0, row_byte_cnt} < row_pixel_bytes_r);
 // file_sector_count 由 file_len 组合计算，会扇出到扫描地址/状态机；
 // 打一拍后再用，消除 100MHz 长路径（M1 报告 -0.086ns）。
 reg [31:0] file_sector_count_r;
@@ -213,9 +246,35 @@ end
 
 always @(posedge clk or posedge rst) begin
     if (rst) begin
+        src_x        <= 16'd0;
+        src_y        <= 16'd0;
+        row_byte_cnt <= 16'd0;
+    end else if (state != ST_LOAD_DATA) begin
+        src_x        <= 16'd0;
+        src_y        <= 16'd0;
+        row_byte_cnt <= 16'd0;
+    end else if (sd_sec_read_data_valid &&
+                 (bmp_len_cnt >= pixel_offset) &&
+                 (src_y < height[15:0])) begin
+        if (row_byte_cnt == row_stride_r[15:0] - 16'd1) begin
+            row_byte_cnt <= 16'd0;
+            src_y        <= src_y + 16'd1;
+            src_x        <= 16'd0;
+        end else begin
+            row_byte_cnt <= row_byte_cnt + 16'd1;
+            if (bmp_data_valid && (bmp_byte_idx == 2'd2))
+                src_x <= src_x + 16'd1;
+        end
+    end
+end
+
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
         bmp_byte_idx <= 2'd0;
     end else if (state == ST_LOAD_DATA) begin
-        if (bmp_data_valid)
+        if (row_byte_cnt == row_stride_r[15:0] - 16'd1)
+            bmp_byte_idx <= 2'd0;
+        else if (bmp_data_valid)
             bmp_byte_idx <= (bmp_byte_idx == 2'd2) ? 2'd0 : (bmp_byte_idx + 2'd1);
     end else begin
         bmp_byte_idx <= 2'd0;
@@ -226,7 +285,9 @@ always @(posedge clk or posedge rst) begin
     if (rst) begin
         bmp_data_wr_en <= 1'b0;
         bmp_data       <= 24'd0;
+        bmp_src_sop    <= 1'b0;
     end else if (state == ST_LOAD_DATA) begin
+        bmp_src_sop <= 1'b0;
         if (bmp_data_valid) begin
             case (bmp_byte_idx)
                 2'd0: begin
@@ -240,6 +301,8 @@ always @(posedge clk or posedge rst) begin
                 2'd2: begin
                     bmp_data_wr_en  <= 1'b1;
                     bmp_data[23:16] <= sd_sec_read_data;
+                    if ((src_x == 16'd0) && (src_y == 16'd0))
+                        bmp_src_sop <= 1'b1;
                 end
                 default: begin
                     bmp_data_wr_en <= 1'b0;
@@ -250,6 +313,7 @@ always @(posedge clk or posedge rst) begin
         end
     end else begin
         bmp_data_wr_en <= 1'b0;
+        bmp_src_sop    <= 1'b0;
     end
 end
 
@@ -266,6 +330,11 @@ always @(posedge clk or posedge rst) begin
         scan_found_total  <= 3'd0;
         scan_sector       <= 32'd0;
         load_sector_latched <= 32'd0;
+        bmp_src_config    <= 1'b0;
+        bmp_src_eof       <= 1'b0;
+        load_pause        <= 1'b0;
+        row_pixel_bytes_r <= 17'd0;
+        row_stride_r      <= 17'd0;
     end else if (!sd_init_done) begin
         state             <= ST_IDLE;
         state_code        <= 4'd0;
@@ -278,8 +347,15 @@ always @(posedge clk or posedge rst) begin
         scan_found_total  <= 3'd0;
         scan_sector       <= 32'd0;
         load_sector_latched <= 32'd0;
+        bmp_src_config    <= 1'b0;
+        bmp_src_eof       <= 1'b0;
+        load_pause        <= 1'b0;
+        row_pixel_bytes_r <= 17'd0;
+        row_stride_r      <= 17'd0;
     end else begin
         scan_found_valid <= 1'b0;
+        bmp_src_config   <= 1'b0;
+        bmp_src_eof      <= 1'b0;
 
         case (state)
             ST_IDLE: begin
@@ -296,6 +372,8 @@ always @(posedge clk or posedge rst) begin
                 end else if (load_start) begin
                     load_sector_latched <= load_sector;
                     sd_sec_read_addr    <= load_sector;
+                    load_pause          <= 1'b0;
+                    bmp_src_eof         <= 1'b0;
                     state               <= ST_LOAD_HDR;
                 end
             end
@@ -342,6 +420,9 @@ always @(posedge clk or posedge rst) begin
                     if (header_match_r) begin
                         write_req        <= 1'b1;
                         sd_sec_read_addr <= load_sector_latched;
+                        bmp_src_config   <= 1'b1;   // 给 bmp_scale 锁存 W/H
+                        row_pixel_bytes_r <= {1'b0, width[15:0]} * 17'd3;
+                        row_stride_r      <= (({1'b0, width[15:0]} * 17'd3) + 17'd3) & ~17'd3;
                         state            <= ST_LOAD_WAIT;
                     end else begin
                         state <= ST_IDLE;
@@ -352,22 +433,34 @@ always @(posedge clk or posedge rst) begin
             ST_LOAD_WAIT: begin
                 state_code <= 4'd3;
                 if (write_req_ack_s) begin
-                    write_req <= 1'b0;
-                    state     <= ST_LOAD_DATA;
+                    write_req   <= 1'b0;
+                    load_pause  <= 1'b0;
+                    state       <= ST_LOAD_DATA;
                 end
             end
 
             ST_LOAD_DATA: begin
-                state_code  <= 4'd4;
-                sd_sec_read <= 1'b1;
+                state_code <= 4'd4;
 
-                if (sd_sec_read_end) begin
+                if (sd_sec_read_end && !load_pause) begin
                     sd_sec_read <= 1'b0;
                     if (bmp_len_cnt >= file_len) begin
-                        state <= ST_IDLE;
+                        bmp_src_eof <= 1'b1;
+                        state       <= ST_IDLE;
+                        load_pause  <= 1'b0;
                     end else begin
+                        // 必须让 sd_sec_read 至少低一拍：新地址在下一拍才稳定，
+                        // 控制器/仿真模型需要看到低电平再启动下一扇区。
                         sd_sec_read_addr <= sd_sec_read_addr + 32'd1;
+                        load_pause       <= 1'b1;
                     end
+                end else if (load_pause) begin
+                    if (src_ready) begin
+                        sd_sec_read <= 1'b1;
+                        load_pause  <= 1'b0;
+                    end
+                end else begin
+                    sd_sec_read <= 1'b1;
                 end
             end
 

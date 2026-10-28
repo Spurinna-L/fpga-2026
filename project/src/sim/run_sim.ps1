@@ -76,6 +76,26 @@ Invoke-Tb 'tb_regs' @(
     "$h\control\regs.v"
 )
 
+Invoke-Tb 'tb_bmp_read' @(
+    "$here\tb_bmp_read.v",
+    "$h\SD\bmp_read.v"
+)
+
+Invoke-Tb 'tb_bmp_scale' @(
+    "$here\tb_bmp_scale.v",
+    "$here\base_stubs.v",
+    "$h\SD\bmp_scale.v",
+    "$h\video\line_buffer.v"
+)
+
+Invoke-Tb 'tb_bmp_pipeline' @(
+    "$here\tb_bmp_pipeline.v",
+    "$here\base_stubs.v",
+    "$h\SD\bmp_read.v",
+    "$h\SD\bmp_scale.v",
+    "$h\video\line_buffer.v"
+)
+
 Invoke-Tb 'tb_line_read' @(
     "$here\tb_line_read.v",
     "$h\video\frame_line_read.v"
