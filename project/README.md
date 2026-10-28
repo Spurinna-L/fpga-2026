@@ -21,15 +21,16 @@
 | **交互与状态（M1）** | ✅ 已封档 | 4×4 键盘、数码管、1Hz 心跳、参数复位 |
 | **闲置槽保持（M1 补丁）** | ✅ 已上板 | `sdr_refresh_sweep` 消隐期顺序扫描 4 槽；静止 15 分钟以上切图无噪点 |
 | **A/B 转场 + 亮度/OSD/Logo/字幕（M2）** | 🟡 行缓冲/转场已上板；OSD/Logo/字幕待复测 | `frame_line_read` + 行缓冲；溶解/水平滑动；`video_post` 内亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕 |
-| **L2 合成 + 声波/频谱（M3）** | 🟡 TD 全流程完成，待上板 | `synth_player`（32 音 + 贝斯、3 音色）+ `wave_capture` + `spectrum_analyzer`（8 段）+ `audio_viz`；K9 音源、K10 音色、K11 可视化模式 |
+| **L2 合成 + 声波/频谱（M3/M3.1）** | 🟡 TD 全流程完成，待上板 | `synth_player`（32 音 + 贝斯、3 音色）+ `wave_capture` + `spectrum_analyzer`（8 段，每路 3 级级联）+ `audio_viz`（右侧 160px 竖带）；K9 音源、K10 音色、K11 可视化模式 |
 | **QSPI 固化 + 烤机（M4）** | ⚪ 待开始 | 单镜像上电自启 + 2h 稳定性测试 |
 
 **M1 补丁实测**：Setup `+0.174ns` / Hold `+0.019ns`，0 失败端点；LUT 3,994（20.38%）、REG 3,896、BRAM9K 18/64、DSP 0/29。
 **M2 行缓冲/转场实测**：Setup `+0.544ns` / Hold `+0.003ns`，0 失败；LUT 4,216（21.51%）、REG 3,873、BRAM9K 28/64、DSP 2/29；bit：`project/out/main_project_m2_mixer.bit`。
 **M2 完整版实测**：Setup `+0.508ns` / Hold `+0.003ns`，0 失败；LUT 5,082（25.93%）、REG 4,212、BRAM9K 28/64、DSP 3/29；bit：`project/out/main_project_m2_scroll.bit`。
-**M3 实测**：Setup `+0.541ns` / Hold `+0.019ns`，TNS 0 / FEP 0；LUT 8,026（40.95%）、REG 4,896（24.98%）、BRAM9K 29/64、DSP 4/29、PLL 3/4、IO 39；bit：`project/src/td_project/main_project_Runs/syn_1/main_project.bit`（630,788 B）。
+**M3 实测**：Setup `+0.541ns` / Hold `+0.019ns`，TNS 0 / FEP 0；LUT 8,026（40.95%）、REG 4,896（24.98%）、BRAM9K 29/64、DSP 4/29、PLL 3/4、IO 39。
+**M3.1 实测（当前基线）**：Setup `+0.792ns` / Hold `+0.003ns`，TNS 0 / FEP 0；LUT 9,055（46.20%）、REG 5,236（26.71%）、BRAM9K 29/64、DSP 4/29、PLL 3/4、IO 39；bit：`project/src/td_project/main_project_Runs/syn_1/main_project.bit`（630,788 B）。
 
-> **当前主 bit**：`project/src/td_project/main_project_Runs/syn_1/main_project.bit`（M3：L2 合成器 + 声波/频谱叠加；待上板复测）。
+> **当前主 bit**：`project/src/td_project/main_project_Runs/syn_1/main_project.bit`（M3.1：L2 合成器 + 右侧竖带声波/频谱叠加；待上板复测）。
 
 ---
 

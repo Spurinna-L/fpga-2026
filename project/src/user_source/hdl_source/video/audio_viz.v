@@ -3,15 +3,20 @@
 //-----------------------------------------------------------------------------
 // 功能：
 //   串在 video_proc 之后、osd_composer 之前的一个叠加图层，纯像素域工作：
-//     · 波形：屏幕中下部一条 640 点示波器曲线（青色 + 2 级渐变阴影）
-//     · 频谱：底部 8 根柱子（绿→黄→红三段配色）+ 白色峰值点
+//     · 波形：右侧一条示波器曲线（青色 + 2 级渐变阴影，640 点缓冲按 4:1 抽取）
+//     · 频谱：右侧 8 根柱子（绿→黄→红三段配色）+ 白色峰值点
 //   两个图层可以独立开关（I_mode[0] = 波形，I_mode[1] = 频谱）。
 //   I_mode == 0 时模块完全直通，画面与 M2 基线逐像素一致，便于上板对比。
 //
-//   版面（640×480，与滚动字幕 y=444..467 严格避让）：
-//     y = 352..384   波形带（基线 368，幅度 ±16px 后裁切）
-//     y = 391..439   频谱柱（柱高 0..48px，从 439 向上生长）
-//     x = 128..511   8 根柱子，每根占 64px 单元、柱宽 60px、间隙 4px
+//   版面（640×480）：所有图形只占 x=480..639 这条 160px 竖带，左侧 480px
+//   主画面完全不参与叠加，避免遮挡正常视频内容。
+//     x = 480..639   可视化竖带（宽 160）
+//     y = 72..184    波形带（基线 128，幅度 ±56px，下方 10px 渐变阴影）
+//     y = 243..435   频谱柱（柱高 = 段值 ×4，0..192px，从 435 向上生长）
+//     x = 496..623   8 根柱子，每根占 16px 单元（左右各留 16px 边距）、
+//                    柱宽 14px、间隙 2px
+//   避让：右上参数面板 x=472..631 / y=8..59、左上 Logo x=8..39、底部滚动
+//   字幕 y=444..467，本模块的 y 范围 72..435 与三者均不重叠。
 //
 // 流水（1 拍）：
 //   波形 RAM 读延迟 1 拍，所以本模块把 de/x/y/rgb 一起再打一拍；
@@ -55,11 +60,13 @@ module audio_viz (
     //-------------------------------------------------------------------------
     // 版面与配色
     //-------------------------------------------------------------------------
-    localparam [9:0] Y_WAVE_BASE = 10'd368;   // 波形基线
-    localparam [9:0] Y_WAVE_MIN  = 10'd352;   // 波形带上下沿
-    localparam [9:0] Y_WAVE_MAX  = 10'd384;
-    localparam [9:0] Y_BAR_BOT   = 10'd439;   // 柱子底部
-    localparam [9:0] AMP_LIMIT   = 10'd16;    // 波形最大偏移（±16px）
+    localparam [9:0] X_VIZ0     = 10'd480;    // 可视化竖带左边界
+    localparam [9:0] Y_WAVE_BASE= 10'd128;    // 波形基线
+    localparam [9:0] Y_WAVE_MIN = 10'd72;     // 波形带上下沿
+    localparam [9:0] Y_WAVE_MAX = 10'd184;
+    localparam [9:0] Y_BAR_BOT  = 10'd435;    // 柱子底部
+    localparam [9:0] Y_SEG_G    = 10'd371;    // 绿色段上界（底部 64px）
+    localparam [9:0] Y_SEG_Y    = 10'd307;    // 黄色段上界（再往上 64px）
 
     localparam [23:0] C_WAVE  = 24'h00FFFF;   // 波形主线（青）
     localparam [23:0] C_SH1   = 24'h0A6A78;   // 阴影近端
@@ -87,13 +94,19 @@ module audio_viz (
     wire [47:0] bar_vec;
     wire [47:0] peak_vec;
 
+    // 波形读地址：竖带内 x-480 = 0..159，×4 后覆盖整个 640 点缓冲
+    // （相当于 4:1 抽取，一屏能看到约 3.5 个周期而不是 0.87 个）。
+    // 窗口外地址会越界，wave_capture 内部做了一次 mod 640 与兜底，安全。
+    wire [9:0] wx_off     = I_x - X_VIZ0;
+    wire [9:0] wave_raddr = {wx_off[7:0], 2'b00};
+
     wave_capture u_wave (
         .I_clk        (I_clk),
         .I_rst        (I_rst),
         .I_vs_fall    (vs_fall),
         .I_samp_valid (I_samp_valid),
         .I_samp       (I_samp),
-        .I_rd_x       (I_x),
+        .I_rd_x       (wave_raddr),
         .O_rd_data    (wave_data)
     );
 
@@ -135,27 +148,33 @@ module audio_viz (
     assign O_y  = d1_y;
 
     //-------------------------------------------------------------------------
-    // 波形几何：8bit 有符号样本 → ±16px 偏移（超限裁切，防止冲出波形带）
+    // 波形几何：8bit 有符号样本 → ±56px 偏移（超限裁切，防止冲出波形带）
+    //   样本高 8bit 在 L1（±2e6）/L2（±1.7e6）下都有 ±25..±31，左移 1 位
+    //   即可铺满 112px 高的波形带，不放大时会显得过平。
     //-------------------------------------------------------------------------
     wire signed [8:0]  wv   = {{1{wave_data[7]}}, wave_data};
-    wire signed [9:0]  wraw = {{1{wv[8]}}, wv} >>> 1;                 // ±63
-    wire signed [9:0]  woff = (wraw >  10'sd16) ?  10'sd16 :
-                              (wraw < -10'sd16) ? -10'sd16 : wraw;
-    wire signed [10:0] y_wave_s = 11'sd368 - {{1{woff[9]}}, woff};
-    wire        [9:0]  y_wave   = y_wave_s[9:0];
+    wire signed [9:0]  wraw = {{1{wv[8]}}, wv} <<< 1;                 // ±60
+    wire signed [9:0]  woff = (wraw >  10'sd56) ?  10'sd56 :
+                              (wraw < -10'sd56) ? -10'sd56 : wraw;
+    // 混合有/无符号运算得到的是模 2^11 的无符号数，取低 10 位正好是屏幕坐标
+    wire        [10:0] y_wave_u = {1'b0, Y_WAVE_BASE} - {{1{woff[9]}}, woff};
+    wire        [9:0]  y_wave   = y_wave_u[9:0];
 
-    wire in_wave_band = (d1_y >= Y_WAVE_MIN) && (d1_y <= Y_WAVE_MAX);
+    wire in_viz_x     = (d1_x >= X_VIZ0);
+    wire in_wave_band = in_viz_x && (d1_y >= Y_WAVE_MIN) && (d1_y <= Y_WAVE_MAX);
     wire on_wave      = (d1_y == y_wave);
-    wire in_shadow    = (d1_y > y_wave) && (d1_y <= Y_WAVE_MAX);
-    wire shadow_near  = ((d1_y - y_wave) <= 10'd2);
+    wire [9:0] sh_d   = d1_y - y_wave;
+    wire in_shadow    = (d1_y > y_wave) && (sh_d <= 10'd10);
+    wire shadow_near  = (sh_d <= 10'd3);
 
     //-------------------------------------------------------------------------
-    // 频谱柱几何：x/64 → 单元号，仅 2..9 号单元画柱
+    // 频谱柱几何：竖带内 x-480 → 16px 单元，只画 1..8 号单元（左右各留 16px）
     //-------------------------------------------------------------------------
-    wire [3:0] cx        = d1_x[9:6];
-    wire       in_cell   = (cx >= 4'd2) && (cx <= 4'd9);
-    wire [2:0] bk        = cx[2:0] - 3'd2;
-    wire       in_bar_col= in_cell && (d1_x[5:0] < 6'd60);
+    wire [9:0] bx        = d1_x - X_VIZ0;
+    wire [3:0] cx        = bx[7:4];
+    wire       in_cell   = in_viz_x && (cx >= 4'd1) && (cx <= 4'd8);
+    wire [2:0] bk        = cx[2:0] - 3'd1;
+    wire       in_bar_col= in_cell && (bx[3:0] < 4'd14);
 
     reg [5:0] bh;   // 本列柱高
     reg [5:0] ph;   // 本列峰值
@@ -172,16 +191,19 @@ module audio_viz (
         endcase
     end
 
-    wire [9:0] bar_top = Y_BAR_BOT - {4'd0, bh} + 10'd1;
+    // 柱高 = 段值 ×4（6bit → 0..192px），纵向空间变大后才有"频谱"的观感
+    wire [9:0] bh_px   = {2'b00, bh, 2'b00};
+    wire [9:0] bar_top = Y_BAR_BOT - bh_px + 10'd1;
     wire on_bar  = in_bar_col && (bh != 6'd0) &&
                    (d1_y >= bar_top) && (d1_y <= Y_BAR_BOT);
 
-    wire [9:0] pk_y    = Y_BAR_BOT - {4'd0, ph};
+    wire [9:0] pk_px   = {2'b00, ph, 2'b00};
+    wire [9:0] pk_y    = Y_BAR_BOT - pk_px;
     wire on_peak = in_bar_col && (ph != 6'd0) &&
                    ((d1_y == pk_y) || (d1_y == pk_y - 10'd1));
 
-    wire [23:0] bar_col = (d1_y >= 10'd424) ? C_GREEN :
-                          (d1_y >= 10'd408) ? C_YELLOW : C_RED;
+    wire [23:0] bar_col = (d1_y >= Y_SEG_G) ? C_GREEN :
+                          (d1_y >= Y_SEG_Y) ? C_YELLOW : C_RED;
 
     // 阴影用原像素压暗后再染色，保证不改变原图亮度层次
     wire [23:0] dim    = {1'b0, d1_rgb[23:17],
