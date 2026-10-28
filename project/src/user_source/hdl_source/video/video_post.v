@@ -4,7 +4,7 @@
 //-----------------------------------------------------------------------------
 // 本版已完成 M2 扩展④：实时亮度/对比度 + 参数 OSD 字符面板 + 左上角 Logo 图层。
 // 扩展⑤：底部中文滚动字幕（scroll_text_overlay，K13 开关）。
-// M3 扩展⑤：音频可视化图层 audio_viz（波形 + 8 段频谱柱，K11 循环 0..3）。
+// M3 扩展⑤：音频可视化图层 audio_viz（波形 + 8 段频谱柱，与 OSD 面板共用 K4 开关）。
 // 链路：rgb_in → video_proc（2 拍）→ audio_viz（1 拍）→ osd_composer（组合）
 //        → logo_overlay（组合）→ scroll_text_overlay（组合）→ rgb_out
 //   - 输入 rgb_in/hs_in/vs_in/de_in/x_in/y_in 已与 mixer 输出严格同拍；
@@ -44,7 +44,7 @@ module video_post (
     input  wire [1:0]        trans_mode,
     input  wire [1:0]        audio_src,
     input  wire [1:0]        audio_timbre,  // 合成器音色（K10），仅 OSD 回显
-    input  wire [1:0]        viz_mode,      // 音频可视化模式（K11）
+    input  wire [1:0]        viz_mode,      // 音频可视化开关，由 osd_en 派生（K4 同一个键）
     input  wire              audio_valid,   // 48kHz 音频样本有效（I2S 解串）
     input  wire signed [23:0] audio_sample, // 24bit 有符号 PCM
 
@@ -179,7 +179,7 @@ module video_post (
         .I_ss_lo    (ch_ss_lo),
         .I_img      (ch_img),
         .I_tr       (ch_tr),
-        .I_viz_mode ({3'b000, prm_viz_mode}),
+        .I_viz_mode ({4'd0, prm_viz_mode[1]}),   // 0/1：波形+频谱同开/全关
         .I_timbre   ({3'b000, audio_timbre}),
         .I_audio_src({3'b000, audio_src}),
         .O_de       (osd_de),

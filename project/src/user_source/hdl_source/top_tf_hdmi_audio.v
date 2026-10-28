@@ -844,8 +844,9 @@ module top(
     //   video_param_latch 做「2FF + 连续稳定检测 + vs 帧边界整组锁存」，
     //   再串 video_proc（2 拍）、audio_viz（1 拍）与 osd_composer / logo_overlay
     //   （均为组合，0 拍），并把 hs/vs 同步延迟 3 拍。
-    //   开关：osd_en（K4）同时控制「右上角参数面板」和「左上角 Logo」，
-    //   两者共用 video_post 内部同一份已同步信号 prm_osd_en，同帧同时开关。
+    //   开关：osd_en（K4）同时控制「右上角参数面板」「左上角 Logo」和「音频可视化
+    //   （波形 + 频谱）」，三者共用 video_post 内部同一份已同步信号 prm_osd_en /
+    //   prm_viz_mode，同帧同时开关。
     //   底部滚动字幕由 K13 → subtitle_en 独立开关（同样在帧边界同步）。
     //-------------------------------------------------------------------------
     video_post u_video_post (

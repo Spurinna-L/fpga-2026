@@ -24,7 +24,7 @@
 //   I_osd_en                   OSD 总开关
 //   I_subtitle_en             底部滚动字幕开关（K13）
 //   I_trans_mode[1:0]          转场模式 0..2
-//   I_viz_mode[1:0]            音频可视化模式 0..3（bit0 波形 / bit1 频谱柱）
+//   I_viz_mode[1:0]            音频可视化开关 2'b11=波形+频谱同开 / 2'b00=全关
 //   I_img_idx[1:0]             当前图片序号 0..3
 //   I_time_mm / I_time_ss[7:0] 上电计时
 //

@@ -5,8 +5,9 @@
 //   在画面上叠加一个 3 行 × 20 列、8×16 点阵的字符面板，实时回显：
 //     第 1 行： TIME 00:00 IMG:1/4
 //     第 2 行： BRT:+00 CNT:128 TR:0
-//     第 3 行： MDE:3 TMB:1 SRC:0        （M3 扩展⑤：可视化模式/音色/音源）
+//     第 3 行： MDE:1 TMB:1 SRC:0        （M3 扩展⑤：可视化开关/音色/音源）
 //   其中 mm:ss 每秒跳变、IMG 随切图跳变、BRT/CNT/TR/MDE/TMB/SRC 随按键跳变。
+//   MDE 只有 0/1 两态：1=波形+频谱同开，0=全关，与 OSD 面板共用 K4 开关。
 //
 // 叠加方式（零乘法、零 BRAM）：
 //   字形像素 = 纯白 0xFFFFFF ；
@@ -174,7 +175,7 @@ module osd_composer(
                 default: ch = CH_SP;
             endcase
         end else begin
-            // 第 3 行：MDE:3 TMB:1 SRC:0
+            // 第 3 行：MDE:1 TMB:1 SRC:0
             case (col)
                 5'd0 : ch = CH_M;
                 5'd1 : ch = CH_D;
