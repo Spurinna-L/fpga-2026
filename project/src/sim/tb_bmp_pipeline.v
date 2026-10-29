@@ -255,9 +255,11 @@ module tb_bmp_pipeline;
                 $display("TIMEOUT out_cnt=%0d src_y=%0d fifo=%0d ld_row=%0d W=%0d H=%0d file_len=%0d off=%0d",
                          out_cnt, u_read.src_y, u_scale.fifo_cnt, u_scale.ld_row,
                          u_read.width, u_read.height, u_read.file_len, u_read.pixel_offset);
-                $display("  out_y=%0d out_x=%0d cur_y0=%0d want0=%0d want1=%0d buf_free=%b ld_state=%0d ld_x=%0d o_state=%0d phase=%0d bar=%b",
-                         u_scale.out_y, u_scale.out_x, u_scale.cur_y0,
-                         u_scale.want_y0_r, u_scale.want_y1_r, u_scale.buf_free,
+                $display("  out_y=%0d out_x=%0d rowA=%0d rdyA=%b rowB=%0d rdyB=%b want0=%0d want1=%0d ld_state=%0d ld_x=%0d o_state=%0d phase=%0d bar=%b",
+                         u_scale.out_y, u_scale.out_x,
+                         u_scale.buf_row_a, u_scale.buf_ready_a,
+                         u_scale.buf_row_b, u_scale.buf_ready_b,
+                         u_scale.want_y0_r, u_scale.want_y1_r,
                          u_scale.ld_state, u_scale.ld_x, u_scale.o_state, u_scale.phase,
                          u_scale.bar_pix);
                 errors = errors + 1;

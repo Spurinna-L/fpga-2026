@@ -7,6 +7,7 @@
 #
 # Any iverilog compile failure aborts the run immediately, so a stale .out
 # from a previous run can never be mistaken for a PASS.
+param([switch]$Full)   # -Full: 额外跑大尺寸缩放遍历（tb_scale_fast，约 10 分钟）
 $ErrorActionPreference = "Stop"
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -95,6 +96,34 @@ Invoke-Tb 'tb_bmp_pipeline' @(
     "$h\SD\bmp_scale.v",
     "$h\video\line_buffer.v"
 )
+
+# 用真实 SD 镜像回放 sd_card_bmp 全流程（镜像不存在时自动跳过）
+$m3img = "$here\..\..\out\sd_card_m3_a.img"
+if (Test-Path $m3img) {
+    Invoke-Tb 'tb_sd_bmp' @(
+        "$here\tb_sd_bmp.v",
+        "$here\base_stubs.v",
+        "$h\SD\sd_card_bmp.v",
+        "$h\SD\bmp_read.v",
+        "$h\SD\bmp_scale.v",
+        "$h\SD\sd_card_top.v",
+        "$h\SD\sd_card_sec_read_write.v",
+        "$h\SD\sd_card_cmd.v",
+        "$h\SD\spi_master.v",
+        "$h\video\line_buffer.v"
+    )
+} else {
+    Write-Host "SKIP tb_sd_bmp (需要 project/out/sd_card_m3_a.img)"
+}
+
+if ($Full) {
+    Invoke-Tb 'tb_scale_fast' @(
+        "$here\tb_scale_fast.v",
+        "$here\base_stubs.v",
+        "$h\SD\bmp_scale.v",
+        "$h\video\line_buffer.v"
+    )
+}
 
 Invoke-Tb 'tb_line_read' @(
     "$here\tb_line_read.v",

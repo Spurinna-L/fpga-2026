@@ -28,7 +28,7 @@
 //   6 个 8×8 乘法器（3 通道 × 水平/垂直各 1 次），综合后 7 DSP
 //   全片（含缩放）：LUT 7,243 / BRAM9K 43 / DSP 11
 //
-// 吞吐：10 拍/像素，离线缩放，单张 640×480 约 25~35ms。
+// 吞吐：11 拍/像素，离线缩放，单张 640×480 约 30~40ms。
 //
 // 时钟/复位：clk = 100MHz（sd_card_clk 域），rst 高有效。
 // src_config 为单拍脉冲：bmp_read 解析完文件头后给出，用于锁存 W/H。
@@ -328,15 +328,25 @@ module bmp_scale #(
 
     //---------------------------------------------------------------------
     // 行缓冲 A / B（2048×24，显式 EG_LOGIC_BRAM PDPW）
+    //   每个缓冲区记录“当前存的是源图第几行”，输出按行号取用；
+    //   装载器只在“该行已被输出消费”时才覆盖缓冲区，避免大步长缩小时
+    //   “释放早于装载”的竞争（y_step≥2 会死锁）。
     //---------------------------------------------------------------------
     wire       ld_we;
     reg [10:0] ld_row, ld_x;
-    reg [1:0]  buf_free, buf_ready;
 
-    // 输出侧请求释放旧源行；由装载器统一更新 buf_free/buf_ready，
-    // 避免同一个 reg 在多个 always 块里被驱动。
-    reg        rel_req;
-    reg        rel_buf;
+    reg [10:0] buf_row_a, buf_row_b;
+    reg        buf_ready_a, buf_ready_b;
+
+    // 输出侧当前行需要的源行（O_SETUP 锁存）
+    reg [15:0] want_y0_r, want_y1_r;
+    reg        want_last_r;
+
+    wire [10:0] tgt_row     = ld_row;
+    wire        tgt_sel     = ld_row[0];                 // 0=buf A, 1=buf B
+    wire [10:0] tgt_row_cur = tgt_sel ? buf_row_b : buf_row_a;
+    wire        tgt_ready   = tgt_sel ? buf_ready_b : buf_ready_a;
+    wire        tgt_stale   = tgt_ready && (tgt_row_cur < want_y0_r);
 
     wire        lb_we_a = ld_we && (ld_row[0] == 1'b0);
     wire        lb_we_b = ld_we && (ld_row[0] == 1'b1);
@@ -391,31 +401,35 @@ module bmp_scale #(
             ld_state   <= LD_IDLE;
             ld_row     <= 11'd0;
             ld_x       <= 11'd0;
-            buf_free   <= 2'b11;
-            buf_ready  <= 2'b00;
+            buf_row_a  <= 11'd0;
+            buf_row_b  <= 11'd0;
+            buf_ready_a<= 1'b0;
+            buf_ready_b<= 1'b0;
             fifo_rd_en <= 1'b0;
         end else if (src_config) begin
             ld_state   <= LD_IDLE;
             ld_row     <= 11'd0;
             ld_x       <= 11'd0;
-            buf_free   <= 2'b11;
-            buf_ready  <= 2'b00;
+            buf_row_a  <= 11'd0;
+            buf_row_b  <= 11'd0;
+            buf_ready_a<= 1'b0;
+            buf_ready_b<= 1'b0;
             fifo_rd_en <= 1'b0;
         end else begin
             fifo_rd_en <= 1'b0;
 
-            // 输出侧已用完的旧行，释放给装载器
-            if (rel_req) begin
-                buf_free[rel_buf]  <= 1'b1;
-                buf_ready[rel_buf] <= 1'b0;
-            end
-
             case (ld_state)
                 LD_IDLE: begin
-                    if (cfg_done && !bypass && (ld_row < H) &&
-                        buf_free[ld_row[0]] && !fifo_empty) begin
-                        fifo_rd_en <= 1'b1;
-                        ld_state   <= LD_RD;
+                    if (cfg_done && !bypass && (ld_row < H) && !fifo_empty) begin
+                        if (tgt_stale) begin
+                            // 该缓冲里的行已被输出消费，先释放（下一拍再装）
+                            if (tgt_sel) buf_ready_b <= 1'b0;
+                            else         buf_ready_a <= 1'b0;
+                        end else if (!tgt_ready) begin
+                            fifo_rd_en <= 1'b1;
+                            ld_state   <= LD_RD;
+                        end
+                        // tgt_ready && !tgt_stale：该行还要用，等输出推进
                     end
                 end
 
@@ -427,8 +441,14 @@ module bmp_scale #(
                 LD_WR: begin
                     ld_state <= LD_IDLE;
                     if (ld_x == W - 1) begin
-                        buf_ready[ld_row[0]] <= 1'b1;
-                        buf_free[ld_row[0]]  <= 1'b0;
+                        // 整行写完才标记“该缓冲有此行”，避免半行被输出误用
+                        if (tgt_sel) begin
+                            buf_row_b   <= tgt_row;
+                            buf_ready_b <= 1'b1;
+                        end else begin
+                            buf_row_a   <= tgt_row;
+                            buf_ready_a <= 1'b1;
+                        end
                         ld_row <= ld_row + 1'b1;
                         ld_x   <= 11'd0;
                     end else begin
@@ -443,10 +463,10 @@ module bmp_scale #(
 
     //---------------------------------------------------------------------
     // 输出：640×480，逐行产生；bar 像素黑，content 走双线性
-    //   10 拍/像素（BRAM 读延迟 1 拍 + 双线性多级流水）：
+    //   11 拍/像素（BRAM 读延迟 1 拍 + 双线性多级流水）：
     //     phase0 设 x0，phase2 采样 x0 + 设 x1，phase4 寄存 x1，
-    //     phase5 水平差值，phase6 水平插值，phase7 垂直差值，
-    //     phase8 垂直乘法，phase9 加/舍入/输出
+    //     phase5 水平差值，phase6 水平乘，phase7 水平加/舍入，
+    //     phase8 垂直差值，phase9 垂直乘，phase10 加/舍入/输出
     //---------------------------------------------------------------------
     localparam O_SETUP = 2'd0;
     localparam O_ROW   = 2'd1;
@@ -456,10 +476,8 @@ module bmp_scale #(
     reg [3:0]  phase;
     reg [9:0]  out_x, out_y;
     reg [31:0] x_acc, y_acc;
-    reg [15:0] cur_y0;
     reg [15:0] row_y0, row_y1;
-    reg [15:0] want_y0_r, want_y1_r;
-    reg        want_last_r;
+    reg        sel_y0, sel_y1;       // row_y0/row_y1 各在哪个缓冲
     reg [7:0]  row_fx, row_fy;
     reg        row_last;
     reg        bar_row;
@@ -468,6 +486,8 @@ module bmp_scale #(
     reg [23:0] x1_rgb0, x1_rgb1;
     reg signed [10:0] diff_top_r, diff_top_g, diff_top_b;
     reg signed [10:0] diff_bot_r, diff_bot_g, diff_bot_b;
+    reg signed [19:0] hprod_top_r, hprod_top_g, hprod_top_b;
+    reg signed [19:0] hprod_bot_r, hprod_bot_g, hprod_bot_b;
     reg [23:0] top_rgb, bot_rgb;
     reg signed [10:0] vdiff_r, vdiff_g, vdiff_b;
     reg signed [19:0] vprod_r, vprod_g, vprod_b;
@@ -476,25 +496,9 @@ module bmp_scale #(
     reg        fsm_done;
     reg        fsm_frame_done;
 
-    // 双线性三级流水：phase4 差值 → phase5 水平插值 → phase6 垂直插值
+    // 双线性多级流水：phase5 差值 → phase6 水平乘 → phase7 水平加/舍入
+    //                → phase8 垂直差 → phase9 垂直乘 → phase10 加/舍入输出
     // 避免“行缓冲读 → 乘 → 加 → 再乘 → 加”在 100MHz 单拍内串成一条长路径。
-    function [7:0] blerp_h_diff;
-        input [7:0] q0;
-        input signed [10:0] d;
-        input [7:0] f;
-        reg signed [10:0] res;
-        reg signed [19:0] m;
-        begin
-            m   = d * $signed({1'b0, f});
-            res = $signed({1'b0, q0}) + ((m + 20'sd128) >>> 8);
-            if (res < 0)
-                blerp_h_diff = 8'd0;
-            else if (res > 255)
-                blerp_h_diff = 8'd255;
-            else
-                blerp_h_diff = res[7:0];
-        end
-    endfunction
 
     function [7:0] blerp_v_final;
         input [7:0] q0;
@@ -526,6 +530,16 @@ module bmp_scale #(
     wire [15:0] want_y1 = (last_row_c || (sy_c >= H - 1)) ? (H - 1) : (sy_c + 1'b1);
     wire        want_last = last_row_c || (sy_c >= H - 1);
 
+    // 行缓冲按“行号”取用：判断需要的两行是否已经在某个缓冲里
+    wire y0_in_a = buf_ready_a && (buf_row_a == want_y0_r);
+    wire y0_in_b = buf_ready_b && (buf_row_b == want_y0_r);
+    wire y1_in_a = buf_ready_a && (buf_row_a == want_y1_r);
+    wire y1_in_b = buf_ready_b && (buf_row_b == want_y1_r);
+    wire y0_avail = y0_in_a || y0_in_b;
+    wire y1_avail = y1_in_a || y1_in_b;
+    wire sel0_c   = y0_in_a ? 1'b0 : 1'b1;
+    wire sel1_c   = y1_in_a ? 1'b0 : 1'b1;
+
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             o_state <= O_SETUP;
@@ -536,9 +550,10 @@ module bmp_scale #(
             cx_cnt  <= 16'd0;
             x_acc   <= 32'd0;
             y_acc   <= 32'd0;
-            cur_y0  <= 16'd0;
             row_y0  <= 16'd0;
             row_y1  <= 16'd0;
+            sel_y0  <= 1'b0;
+            sel_y1  <= 1'b0;
             want_y0_r  <= 16'd0;
             want_y1_r  <= 16'd0;
             want_last_r <= 1'b0;
@@ -557,6 +572,12 @@ module bmp_scale #(
             diff_bot_r <= 11'sd0;
             diff_bot_g <= 11'sd0;
             diff_bot_b <= 11'sd0;
+            hprod_top_r <= 20'sd0;
+            hprod_top_g <= 20'sd0;
+            hprod_top_b <= 20'sd0;
+            hprod_bot_r <= 20'sd0;
+            hprod_bot_g <= 20'sd0;
+            hprod_bot_b <= 20'sd0;
             top_rgb <= 24'd0;
             bot_rgb <= 24'd0;
             vdiff_r <= 11'sd0;
@@ -569,8 +590,6 @@ module bmp_scale #(
             fsm_data  <= 24'd0;
             fsm_done  <= 1'b0;
             fsm_frame_done <= 1'b0;
-            rel_req   <= 1'b0;
-            rel_buf   <= 1'b0;
         end else if (src_config) begin
             o_state <= O_SETUP;
             phase   <= 3'd0;
@@ -580,9 +599,10 @@ module bmp_scale #(
             cx_cnt  <= 16'd0;
             x_acc   <= 32'd0;
             y_acc   <= 32'd0;
-            cur_y0  <= 16'd0;
             row_y0  <= 16'd0;
             row_y1  <= 16'd0;
+            sel_y0  <= 1'b0;
+            sel_y1  <= 1'b0;
             want_y0_r  <= 16'd0;
             want_y1_r  <= 16'd0;
             want_last_r <= 1'b0;
@@ -601,6 +621,12 @@ module bmp_scale #(
             diff_bot_r <= 11'sd0;
             diff_bot_g <= 11'sd0;
             diff_bot_b <= 11'sd0;
+            hprod_top_r <= 20'sd0;
+            hprod_top_g <= 20'sd0;
+            hprod_top_b <= 20'sd0;
+            hprod_bot_r <= 20'sd0;
+            hprod_bot_g <= 20'sd0;
+            hprod_bot_b <= 20'sd0;
             top_rgb <= 24'd0;
             bot_rgb <= 24'd0;
             vdiff_r <= 11'sd0;
@@ -613,12 +639,9 @@ module bmp_scale #(
             fsm_data  <= 24'd0;
             fsm_done  <= 1'b0;
             fsm_frame_done <= 1'b0;
-            rel_req   <= 1'b0;
-            rel_buf   <= 1'b0;
         end else if (!bypass && cfg_done) begin
             fsm_valid <= 1'b0;
             fsm_done  <= 1'b0;
-            rel_req   <= 1'b0;
 
             if (fsm_frame_done) begin
                 // 最后一帧已经输出完，保持静默
@@ -652,17 +675,21 @@ module bmp_scale #(
                 end
 
                 O_ROW: begin
-                    // 只使用已寄存的 want_*，释放/等待逻辑不再跨过 DH 减法
-                    if (cur_y0 < want_y0_r) begin
-                        rel_req <= 1'b1;
-                        rel_buf <= cur_y0[0];
-                        cur_y0  <= cur_y0 + 1'b1;
-                    end else if (ld_row <= want_y1_r) begin
-                        // 等待装载器把 want_y1 行写进 BRAM
-                    end else begin
+                    // 需要的两行是否已经装进行缓冲（按行号判断，不依赖装载顺序）
+                    if (y0_avail && y1_avail && !want_last_r) begin
                         row_y0   <= want_y0_r;
                         row_y1   <= want_y1_r;
-                        row_last <= want_last_r;
+                        row_last <= 1'b0;
+                        sel_y0   <= sel0_c;
+                        sel_y1   <= sel1_c;
+                        phase    <= 3'd0;
+                        o_state  <= O_PIX;
+                    end else if (want_last_r && y0_avail) begin
+                        row_y0   <= want_y0_r;
+                        row_y1   <= want_y0_r;
+                        row_last <= 1'b1;
+                        sel_y0   <= sel0_c;
+                        sel_y1   <= sel0_c;
                         phase    <= 3'd0;
                         o_state  <= O_PIX;
                     end
@@ -677,14 +704,14 @@ module bmp_scale #(
                                 (out_x < OX) ||
                                 (out_x >= x_end)) begin
                                 bar_pix <= 1'b1;
-                                phase   <= 4'd9;
+                                phase   <= 4'd10;
                             end else begin
                                 bar_pix <= 1'b0;
                                 row_fx  <= (last_col_c || (sx_c >= (W - 1))) ? 8'd0 : fx_c;
                                 rd_addr <= (last_col_c || (sx_c >= (W - 1)))
                                            ? (W - 1) : sx_c[10:0];
-                                rd_sel0 <= row_y0[0];
-                                rd_sel1 <= row_last ? row_y0[0] : row_y1[0];
+                                rd_sel0 <= sel_y0;
+                                rd_sel1 <= row_last ? sel_y0 : sel_y1;
                                 phase   <= 4'd1;
                             end
                         end
@@ -727,41 +754,54 @@ module bmp_scale #(
                             phase <= 4'd6;
                         end
 
-                        // 6: 水平插值
+                        // 6: 水平插值乘法（只做乘法）
                         4'd6: begin
                             if (!bar_pix) begin
-                                top_rgb[23:16] <= blerp_h_diff(p00[23:16], diff_top_r, row_fx);
-                                top_rgb[15:8]  <= blerp_h_diff(p00[15:8],  diff_top_g, row_fx);
-                                top_rgb[7:0]   <= blerp_h_diff(p00[7:0],   diff_top_b, row_fx);
-                                bot_rgb[23:16] <= blerp_h_diff(p01[23:16], diff_bot_r, row_fx);
-                                bot_rgb[15:8]  <= blerp_h_diff(p01[15:8],  diff_bot_g, row_fx);
-                                bot_rgb[7:0]   <= blerp_h_diff(p01[7:0],   diff_bot_b, row_fx);
+                                hprod_top_r <= diff_top_r * $signed({1'b0, row_fx});
+                                hprod_top_g <= diff_top_g * $signed({1'b0, row_fx});
+                                hprod_top_b <= diff_top_b * $signed({1'b0, row_fx});
+                                hprod_bot_r <= diff_bot_r * $signed({1'b0, row_fx});
+                                hprod_bot_g <= diff_bot_g * $signed({1'b0, row_fx});
+                                hprod_bot_b <= diff_bot_b * $signed({1'b0, row_fx});
                             end
                             phase <= 4'd7;
                         end
 
-                        // 7: 垂直差值
+                        // 7: 水平插值 加/舍入/饱和
                         4'd7: begin
+                            if (!bar_pix) begin
+                                top_rgb[23:16] <= blerp_v_final(p00[23:16], hprod_top_r);
+                                top_rgb[15:8]  <= blerp_v_final(p00[15:8],  hprod_top_g);
+                                top_rgb[7:0]   <= blerp_v_final(p00[7:0],   hprod_top_b);
+                                bot_rgb[23:16] <= blerp_v_final(p01[23:16], hprod_bot_r);
+                                bot_rgb[15:8]  <= blerp_v_final(p01[15:8],  hprod_bot_g);
+                                bot_rgb[7:0]   <= blerp_v_final(p01[7:0],   hprod_bot_b);
+                            end
+                            phase <= 4'd8;
+                        end
+
+                        // 8: 垂直差值
+                        4'd8: begin
                             if (!bar_pix) begin
                                 vdiff_r <= $signed({1'b0, bot_rgb[23:16]}) - $signed({1'b0, top_rgb[23:16]});
                                 vdiff_g <= $signed({1'b0, bot_rgb[15:8]})  - $signed({1'b0, top_rgb[15:8]});
                                 vdiff_b <= $signed({1'b0, bot_rgb[7:0]})   - $signed({1'b0, top_rgb[7:0]});
                             end
-                            phase <= 4'd8;
+                            phase <= 4'd9;
                         end
 
-                        // 8: 垂直乘法
-                        4'd8: begin
+                        // 9: 垂直乘法
+                        4'd9: begin
                             if (!bar_pix) begin
                                 vprod_r <= vdiff_r * $signed({1'b0, row_fy});
                                 vprod_g <= vdiff_g * $signed({1'b0, row_fy});
                                 vprod_b <= vdiff_b * $signed({1'b0, row_fy});
                             end
-                            phase <= 4'd9;
+                            phase <= 4'd10;
                         end
 
-                        // 9: 加法/舍入/截断并输出
-                        4'd9: begin
+                        // 10: 加法/舍入/截断并输出
+                        4'd10: begin
                             if (bar_pix) begin
                                 fsm_data <= 24'd0;
                             end else begin
