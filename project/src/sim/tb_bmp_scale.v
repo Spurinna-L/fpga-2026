@@ -38,7 +38,8 @@ module tb_bmp_scale;
         .src_height (src_height),
         .out_valid  (out_valid),
         .out_data   (out_data),
-        .out_done   (out_done)
+        .out_done   (out_done),
+        .src_eof    (1'b0)
     );
 
     always #5 clk = ~clk;   // 100MHz

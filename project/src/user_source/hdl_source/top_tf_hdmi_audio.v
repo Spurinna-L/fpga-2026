@@ -237,6 +237,13 @@ module top(
             frame_write_toggle_mem <= ~frame_write_toggle_mem;
     end
 
+    // 临时诊断总线（DEBUG_SEG=1 时显示在数码管上）
+    wire [3:0] dbg_found;
+    wire [3:0] dbg_def_t;
+    wire [3:0] dbg_def_o;
+    wire       dbg_scale_bypass;
+    wire [3:0] dbg_flags;
+
     sd_card_bmp #(
         .CLK_FREQ_HZ       (100_000_000),
         .SCAN_START_SECTOR (32'd0),
@@ -255,6 +262,11 @@ module top(
         .write_buf_idx     (write_buf_idx), // 当前写入缓冲区索引
         .disp_buf_idx      (disp_buf_idx),  // 当前显示缓冲区索引
         .img_idx_o         (img_idx),
+        .dbg_found         (dbg_found),
+        .dbg_def_t         (dbg_def_t),
+        .dbg_def_o         (dbg_def_o),
+        .dbg_scale_bypass  (dbg_scale_bypass),
+        .dbg_flags         (dbg_flags),
         .write_req         (sd_write_req),
         .write_req_ack     (sd_write_req_ack),
         .write_en          (sd_write_en),
@@ -840,10 +852,17 @@ module top(
     //-------------------------------------------------------------------------
     // 数码管 / LED
     //-------------------------------------------------------------------------
+    // DEBUG_SEG=1：数码管显示 [state][found][write_en/64K][flags]
+    //   flags = {display_valid, load_busy, source_done_seen, finish_seen}
+    localparam DEBUG_SEG = 1'b0;
+    wire [31:0] seg_value_final = DEBUG_SEG
+        ? {16'h0000, state_code, dbg_found, dbg_def_t, dbg_def_o}
+        : regs_seg_value;
+
     seg_led u_seg (
         .clk     (clk),
         .rst_n   (rst_n_sys),
-        .value   (regs_seg_value),
+        .value   (seg_value_final),
         .dot     (4'b0000),
         .seg_sel (seg_sel),
         .seg_led (seg_led)

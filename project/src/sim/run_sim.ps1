@@ -89,6 +89,13 @@ Invoke-Tb 'tb_bmp_scale' @(
     "$h\video\line_buffer.v"
 )
 
+Invoke-Tb 'tb_pad' @(
+    "$here\tb_pad.v",
+    "$here\base_stubs.v",
+    "$h\SD\bmp_scale.v",
+    "$h\video\line_buffer.v"
+)
+
 Invoke-Tb 'tb_bmp_pipeline' @(
     "$here\tb_bmp_pipeline.v",
     "$here\base_stubs.v",

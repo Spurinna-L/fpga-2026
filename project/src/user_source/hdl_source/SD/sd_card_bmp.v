@@ -59,6 +59,13 @@ module sd_card_bmp #(
     output reg [1:0]            disp_buf_idx,     // 当前显示缓冲区索引
     output wire [1:0]           img_idx_o,        // 当前显示的图片序号（给 regs/OSD）
 
+    // 临时诊断（DEBUG_SEG=1 时显示在数码管上）
+    output wire [3:0]           dbg_found,        // 扫描到的图片数 0..4
+    output wire [3:0]           dbg_def_t,        // 距满帧还差多少像素 /64（高 4 位）
+    output wire [3:0]           dbg_def_o,        // 距满帧还差多少像素 /64（低 4 位）
+    output wire [3:0]           dbg_flags,        // {display_valid, load_busy, source_done_seen, finish_seen}
+    output wire                 dbg_scale_bypass, // 当前图是否走 640×480 旁路
+
     output                      write_req,
     input                       write_req_ack,
     output                      write_en,
@@ -88,6 +95,7 @@ wire             scale_src_ready;
 wire             scale_out_valid;
 wire [23:0]      scale_out_data;
 wire             scale_done;
+wire             scale_bypass;
 wire             sd_init_done;
 wire             bmp_ready;
 wire             scan_done;
@@ -126,6 +134,31 @@ assign write_data = {scale_out_data[23:16], scale_out_data[15:8], scale_out_data
 assign img_idx_o  = img_idx;
 assign auto_tick  = (auto_cnt == (CLK_FREQ_HZ * AUTO_PERIOD_S - 1));
 assign write_finish_pulse = wrfin_tgl_sync[2] ^ wrfin_tgl_sync[1];
+
+// ---- 临时诊断计数器 ----
+reg [23:0] dbg_wr_cnt;
+reg        dbg_finish_seen;
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
+        dbg_wr_cnt     <= 24'd0;
+        dbg_finish_seen <= 1'b0;
+    end else begin
+        if (write_en && (dbg_wr_cnt != 24'hFFFFFF))
+            dbg_wr_cnt <= dbg_wr_cnt + 24'd1;
+        if (write_finish_pulse)
+            dbg_finish_seen <= 1'b1;
+    end
+end
+assign dbg_found = {1'b0, img_found_count};
+// 距满帧（307200）还差多少像素：按 /64 显示成 2 位十六进制，
+// 满帧 = 00；差 1 行(640) = 0A；差 8 行 = 50
+wire [23:0] dbg_cnt_sat = (dbg_wr_cnt > 24'd307200) ? 24'd307200 : dbg_wr_cnt;
+wire [23:0] dbg_def     = 24'd307200 - dbg_cnt_sat;
+wire [23:0] dbg_def64   = dbg_def >> 6;
+assign dbg_def_t = (dbg_def64 > 24'd255) ? 4'hF : dbg_def64[7:4];
+assign dbg_def_o = (dbg_def64 > 24'd255) ? 4'hF : dbg_def64[3:0];
+assign dbg_flags = {display_valid, load_busy, source_done_seen, dbg_finish_seen};
+assign dbg_scale_bypass = scale_bypass;
 
 key_press_debounce #(
     .CLK_FREQ_HZ (CLK_FREQ_HZ),
@@ -366,7 +399,9 @@ bmp_scale #(
     .out_valid  (scale_out_valid),
     .out_data   (scale_out_data),
     .out_done   (scale_done),
-    .src_ready  (scale_src_ready)
+    .src_ready  (scale_src_ready),
+    .src_eof    (bmp_src_eof),
+    .dbg_bypass (scale_bypass)
 );
 
 sd_card_top sd_card_top_m0(

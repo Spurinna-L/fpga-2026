@@ -59,7 +59,13 @@ module bmp_scale #(
     output wire        out_done,
 
     // 源端反压：FIFO 高水位时拉低，bmp_read 在扇区边界暂停
-    output wire        src_ready
+    output wire        src_ready,
+
+    // 源端已读完（旁路模式用它补黑到满帧）
+    input  wire        src_eof,
+
+    // 诊断：当前是否走了 640×480 逐像素旁路
+    output wire        dbg_bypass
 );
 
     localparam integer PIXELS = DST_W * DST_H;
@@ -251,6 +257,8 @@ module bmp_scale #(
     // 1:1 旁路（640×480 源图不经过缩放，保证与 M2 逐像素一致）
     //---------------------------------------------------------------------
     reg        byp_valid;
+    reg        eof_seen;
+    reg        pad_row;      // 1=当前行在用黑像素补齐（源已读完）
     reg [23:0] byp_data;
     reg        byp_done;
     reg [18:0] byp_cnt;
@@ -261,20 +269,36 @@ module bmp_scale #(
             byp_data  <= 24'd0;
             byp_done  <= 1'b0;
             byp_cnt   <= 19'd0;
+            eof_seen  <= 1'b0;
         end else if (src_config) begin
             byp_valid <= 1'b0;
             byp_data  <= 24'd0;
             byp_done  <= 1'b0;
             byp_cnt   <= 19'd0;
+            eof_seen  <= 1'b0;
         end else begin
             byp_valid <= 1'b0;
             byp_done  <= 1'b0;
-            if (bypass && src_valid && (byp_cnt < PIXELS)) begin
-                byp_valid <= 1'b1;
-                byp_data  <= src_data;
-                byp_cnt   <= byp_cnt + 19'd1;
-                if (byp_cnt == PIXELS - 1)
-                    byp_done <= 1'b1;
+            if (src_eof)
+                eof_seen <= 1'b1;
+
+            if (bypass && (byp_cnt < PIXELS)) begin
+                if (src_valid) begin
+                    // 正常像素
+                    byp_valid <= 1'b1;
+                    byp_data  <= src_data;
+                    byp_cnt   <= byp_cnt + 19'd1;
+                    if (byp_cnt == PIXELS - 1)
+                        byp_done <= 1'b1;
+                end else if (eof_seen) begin
+                    // 源像素不足 307200（板端实测会少几百个）：补黑到满帧，
+                    // 保证 frame_write 一定能收满 307200 字、预载流程不卡死。
+                    byp_valid <= 1'b1;
+                    byp_data  <= 24'd0;
+                    byp_cnt   <= byp_cnt + 19'd1;
+                    if (byp_cnt == PIXELS - 1)
+                        byp_done <= 1'b1;
+                end
             end
         end
     end
@@ -352,7 +376,7 @@ module bmp_scale #(
     wire        lb_we_b = ld_we && (ld_row[0] == 1'b1);
     wire [10:0] lb_waddr_a = ld_x;
     wire [10:0] lb_waddr_b = ld_x;
-    wire [23:0] lb_wdata   = fifo_dout;
+    wire [23:0] lb_wdata   = pad_row ? 24'd0 : fifo_dout;
 
     reg [10:0]  rd_addr;
     reg         rd_sel0, rd_sel1;  // 0=buf A, 1=buf B
@@ -420,14 +444,21 @@ module bmp_scale #(
 
             case (ld_state)
                 LD_IDLE: begin
-                    if (cfg_done && !bypass && (ld_row < H) && !fifo_empty) begin
+                    if (cfg_done && !bypass && (ld_row < H)) begin
                         if (tgt_stale) begin
                             // 该缓冲里的行已被输出消费，先释放（下一拍再装）
                             if (tgt_sel) buf_ready_b <= 1'b0;
                             else         buf_ready_a <= 1'b0;
                         end else if (!tgt_ready) begin
-                            fifo_rd_en <= 1'b1;
-                            ld_state   <= LD_RD;
+                            if (!fifo_empty) begin
+                                pad_row    <= 1'b0;
+                                fifo_rd_en <= 1'b1;
+                                ld_state   <= LD_RD;
+                            end else if (eof_seen) begin
+                                // 源已读完但还差行：补黑行，保证输出 640×480 一定走完
+                                pad_row  <= 1'b1;
+                                ld_state <= LD_RD;
+                            end
                         end
                         // tgt_ready && !tgt_stale：该行还要用，等输出推进
                     end
@@ -488,6 +519,8 @@ module bmp_scale #(
     reg signed [10:0] diff_bot_r, diff_bot_g, diff_bot_b;
     reg signed [19:0] hprod_top_r, hprod_top_g, hprod_top_b;
     reg signed [19:0] hprod_bot_r, hprod_bot_g, hprod_bot_b;
+    // 乘法器 B 操作数单独寄存（bar 时置 0），避免使能逻辑直接驱动 DSP 输入
+    reg [7:0]  mul_fx, mul_fy;
     reg [23:0] top_rgb, bot_rgb;
     reg signed [10:0] vdiff_r, vdiff_g, vdiff_b;
     reg signed [19:0] vprod_r, vprod_g, vprod_b;
@@ -578,6 +611,8 @@ module bmp_scale #(
             hprod_bot_r <= 20'sd0;
             hprod_bot_g <= 20'sd0;
             hprod_bot_b <= 20'sd0;
+            mul_fx <= 8'd0;
+            mul_fy <= 8'd0;
             top_rgb <= 24'd0;
             bot_rgb <= 24'd0;
             vdiff_r <= 11'sd0;
@@ -627,6 +662,8 @@ module bmp_scale #(
             hprod_bot_r <= 20'sd0;
             hprod_bot_g <= 20'sd0;
             hprod_bot_b <= 20'sd0;
+            mul_fx <= 8'd0;
+            mul_fy <= 8'd0;
             top_rgb <= 24'd0;
             bot_rgb <= 24'd0;
             vdiff_r <= 11'sd0;
@@ -741,7 +778,7 @@ module bmp_scale #(
                             phase <= 4'd5;
                         end
 
-                        // 5: 水平差值（只做减法）
+                        // 5: 水平差值 + 寄存乘法器 B 操作数
                         4'd5: begin
                             if (!bar_pix) begin
                                 diff_top_r <= $signed({1'b0, x1_rgb0[23:16]}) - $signed({1'b0, p00[23:16]});
@@ -750,20 +787,21 @@ module bmp_scale #(
                                 diff_bot_r <= $signed({1'b0, x1_rgb1[23:16]}) - $signed({1'b0, p01[23:16]});
                                 diff_bot_g <= $signed({1'b0, x1_rgb1[15:8]})  - $signed({1'b0, p01[15:8]});
                                 diff_bot_b <= $signed({1'b0, x1_rgb1[7:0]})   - $signed({1'b0, p01[7:0]});
+                                mul_fx     <= row_fx;
+                            end else begin
+                                mul_fx     <= 8'd0;
                             end
                             phase <= 4'd6;
                         end
 
-                        // 6: 水平插值乘法（只做乘法）
+                        // 6: 水平插值乘法（B 操作数纯寄存器）
                         4'd6: begin
-                            if (!bar_pix) begin
-                                hprod_top_r <= diff_top_r * $signed({1'b0, row_fx});
-                                hprod_top_g <= diff_top_g * $signed({1'b0, row_fx});
-                                hprod_top_b <= diff_top_b * $signed({1'b0, row_fx});
-                                hprod_bot_r <= diff_bot_r * $signed({1'b0, row_fx});
-                                hprod_bot_g <= diff_bot_g * $signed({1'b0, row_fx});
-                                hprod_bot_b <= diff_bot_b * $signed({1'b0, row_fx});
-                            end
+                            hprod_top_r <= diff_top_r * $signed({1'b0, mul_fx});
+                            hprod_top_g <= diff_top_g * $signed({1'b0, mul_fx});
+                            hprod_top_b <= diff_top_b * $signed({1'b0, mul_fx});
+                            hprod_bot_r <= diff_bot_r * $signed({1'b0, mul_fx});
+                            hprod_bot_g <= diff_bot_g * $signed({1'b0, mul_fx});
+                            hprod_bot_b <= diff_bot_b * $signed({1'b0, mul_fx});
                             phase <= 4'd7;
                         end
 
@@ -780,23 +818,24 @@ module bmp_scale #(
                             phase <= 4'd8;
                         end
 
-                        // 8: 垂直差值
+                        // 8: 垂直差值 + 寄存乘法器 B 操作数
                         4'd8: begin
                             if (!bar_pix) begin
                                 vdiff_r <= $signed({1'b0, bot_rgb[23:16]}) - $signed({1'b0, top_rgb[23:16]});
                                 vdiff_g <= $signed({1'b0, bot_rgb[15:8]})  - $signed({1'b0, top_rgb[15:8]});
                                 vdiff_b <= $signed({1'b0, bot_rgb[7:0]})   - $signed({1'b0, top_rgb[7:0]});
+                                mul_fy  <= row_fy;
+                            end else begin
+                                mul_fy  <= 8'd0;
                             end
                             phase <= 4'd9;
                         end
 
-                        // 9: 垂直乘法
+                        // 9: 垂直乘法（B 操作数为纯寄存器，不再被使能逻辑驱动）
                         4'd9: begin
-                            if (!bar_pix) begin
-                                vprod_r <= vdiff_r * $signed({1'b0, row_fy});
-                                vprod_g <= vdiff_g * $signed({1'b0, row_fy});
-                                vprod_b <= vdiff_b * $signed({1'b0, row_fy});
-                            end
+                            vprod_r <= vdiff_r * $signed({1'b0, mul_fy});
+                            vprod_g <= vdiff_g * $signed({1'b0, mul_fy});
+                            vprod_b <= vdiff_b * $signed({1'b0, mul_fy});
                             phase <= 4'd10;
                         end
 
@@ -854,6 +893,7 @@ module bmp_scale #(
 
     // FIFO 半满即反压，给一个扇区（最多 171 像素）的在途数据留余量
     assign src_ready = bypass ? 1'b1 : (fifo_cnt < (1 << (FIFO_AW - 1)));
+    assign dbg_bypass = bypass;
 
     // 未使用信号：保留端口便于调试/后续扩展
     // src_sop/src_eof 由 bmp_read 提供，本模块用 src_config 启动

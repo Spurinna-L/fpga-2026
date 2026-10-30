@@ -17,6 +17,7 @@ module tb_scale_fast;
     .src_valid(src_valid), .src_data(src_data),
     .src_config(src_config), .src_width(src_w), .src_height(src_h),
     .out_valid(out_valid), .out_data(out_data), .out_done(out_done),
+    .src_eof(1'b0),
     .src_ready(src_ready));
 
   integer out_cnt = 0, done = 0, err = 0;
