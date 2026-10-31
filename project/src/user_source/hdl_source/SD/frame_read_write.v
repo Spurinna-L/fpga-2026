@@ -115,8 +115,8 @@ module frame_read_write
 	input[WRITE_DATA_BITS - 1:0]     write_data                 // write data
 
 );
-wire[BURST_BITS - 1:0]                           wrusedw;                    // write used words
-wire[BURST_BITS - 1:0]                           rdusedw;                    // read used words
+wire[9:0]                                       wrusedw;                    // write used words (FIFO 深 512，必须 10 bit)
+wire[9:0]                                       rdusedw;                    // read used words (FIFO 深 512，必须 10 bit)
 
 wire 								 App_rd_busy;
 wire								 App_wr_busy;

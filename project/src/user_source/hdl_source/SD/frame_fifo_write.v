@@ -132,7 +132,7 @@ always @(posedge mem_clk or posedge rst) begin
 end
 
 wire into_burst_c;
-assign into_burst_c = (((write_len_latch <= (rdusedw_r + write_cnt)) || rdusedw_r > BURST_SIZE) && ~app_rd_busy_r);//当rd在突发时不会进入burst
+assign into_burst_c = (((write_len_latch <= (rdusedw_r + write_cnt)) || rdusedw_r > (BURST_SIZE + 64)) && ~app_rd_busy_r);//留 64 字余量，避免 burst 末尾 FIFO 见底（低水位出队时序）
 
 // into_burst 扇出到 O_wr_busy -> 读 FSM / rd_arbiter，再打一拍切断 125MHz 长路径
 reg into_burst;

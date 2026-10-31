@@ -91,6 +91,8 @@ wire [15:0]      bmp_src_width;
 wire [15:0]      bmp_src_height;
 wire             bmp_src_sop;
 wire             bmp_src_eof;
+wire [3:0]       bmp_dbg_bad_rows;
+wire [15:0]      bmp_dbg_last_x;
 wire             scale_src_ready;
 wire             scale_out_valid;
 wire [23:0]      scale_out_data;
@@ -122,6 +124,7 @@ reg              load_busy;
 
 // bmp_ready 先表示“源文件读取/送 FIFO 完成”；真正切显示要等 write_finish_toggle 同步后
 reg              source_done_seen;
+reg              fin_seen;            // 写完成脉冲锁存（防止早于 source_done_seen）
 
 // 同步 mem_clk 域的 write_finish_toggle
 reg [2:0]        wrfin_tgl_sync;
@@ -129,8 +132,17 @@ wire             write_finish_pulse;
 
 wire auto_tick;
 
-assign write_en   = scale_out_valid;
-assign write_data = {scale_out_data[23:16], scale_out_data[15:8], scale_out_data[7:0], 8'b0};
+//--------------------------------------------------------------------------
+// 判定开关：RAW_BYPASS=1 时跳过 bmp_scale，把 bmp_read 的像素直接写帧缓存
+//   —— 用来判断"倾斜"是否来自缩放器；正常版本必须为 0
+//--------------------------------------------------------------------------
+localparam RAW_BYPASS = 1'b0;
+wire        raw_mode   = RAW_BYPASS && (bmp_src_width == 16'd640) && (bmp_src_height == 16'd480);
+wire        wr_pix_vld = raw_mode ? bmp_src_valid : scale_out_valid;
+wire [23:0] wr_pix_dat = raw_mode ? bmp_src_data  : scale_out_data;
+assign write_en   = wr_pix_vld;
+assign write_data = {wr_pix_dat[23:16], wr_pix_dat[15:8], wr_pix_dat[7:0], 8'b0};
+// 只在 640×480 源图时走直通，其余仍走缩放器（保证握手的源长度匹配）
 assign img_idx_o  = img_idx;
 assign auto_tick  = (auto_cnt == (CLK_FREQ_HZ * AUTO_PERIOD_S - 1));
 assign write_finish_pulse = wrfin_tgl_sync[2] ^ wrfin_tgl_sync[1];
@@ -150,13 +162,10 @@ always @(posedge clk or posedge rst) begin
     end
 end
 assign dbg_found = {1'b0, img_found_count};
-// 距满帧（307200）还差多少像素：按 /64 显示成 2 位十六进制，
-// 满帧 = 00；差 1 行(640) = 0A；差 8 行 = 50
-wire [23:0] dbg_cnt_sat = (dbg_wr_cnt > 24'd307200) ? 24'd307200 : dbg_wr_cnt;
-wire [23:0] dbg_def     = 24'd307200 - dbg_cnt_sat;
-wire [23:0] dbg_def64   = dbg_def >> 6;
-assign dbg_def_t = (dbg_def64 > 24'd255) ? 4'hF : dbg_def64[7:4];
-assign dbg_def_o = (dbg_def64 > 24'd255) ? 4'hF : dbg_def64[3:0];
+// 诊断两位：D3 = 像素数异常（!=W）的源行数（饱和 15）
+//           D4 = 上一源行结束时的 src_x 低 4 位（正常 639 → F）
+assign dbg_def_t = bmp_dbg_last_x[15:12];
+assign dbg_def_o = bmp_dbg_last_x[11:8];
 assign dbg_flags = {display_valid, load_busy, source_done_seen, dbg_finish_seen};
 assign dbg_scale_bypass = scale_bypass;
 
@@ -272,10 +281,17 @@ always @(posedge clk or posedge rst) begin
             if (load_busy && (bmp_ready || scale_done))
                 source_done_seen <= 1'b1;
 
+            // 写完成脉冲可能早于"源读完了"到来（源比帧长时），所以必须锁存
+            if (!load_busy)
+                fin_seen <= 1'b0;
+            else if (write_finish_pulse)
+                fin_seen <= 1'b1;
+
             // 整帧写完：该槽有效；还有图就继续加载下一槽，全部完成才开显示
-            if (load_busy && source_done_seen && write_finish_pulse) begin
+            if (load_busy && source_done_seen && (write_finish_pulse || fin_seen)) begin
                 load_busy        <= 1'b0;
                 source_done_seen <= 1'b0;
+                fin_seen         <= 1'b0;
 
                 if (({1'b0, loaded_slot} + 3'd1) >= img_found_count) begin
                     all_loaded    <= 1'b1;
@@ -375,12 +391,14 @@ bmp_read bmp_read_m0(
     .sd_sec_read_end        (sd_sec_read_end),
     .bmp_data_wr_en         (bmp_src_valid),
     .bmp_data               (bmp_src_data),
-    .src_ready              (scale_src_ready),
+    .src_ready              (raw_mode ? 1'b1 : scale_src_ready),
     .bmp_src_config         (bmp_src_config),
     .bmp_src_width          (bmp_src_width),
     .bmp_src_height         (bmp_src_height),
     .bmp_src_sop            (bmp_src_sop),
-    .bmp_src_eof            (bmp_src_eof)
+    .bmp_src_eof            (bmp_src_eof),
+    .dbg_bad_rows           (bmp_dbg_bad_rows),
+    .dbg_last_x             (bmp_dbg_last_x)
 );
 
 bmp_scale #(
