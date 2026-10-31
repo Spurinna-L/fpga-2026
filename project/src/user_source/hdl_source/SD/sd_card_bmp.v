@@ -126,6 +126,20 @@ reg              load_busy;
 reg              source_done_seen;
 reg              fin_seen;            // 写完成脉冲锁存（防止早于 source_done_seen）
 
+// 无进展看门狗：load_busy 期间若 20ms 没有任何写像素动作，强制放弃该槽继续下一张，
+// 避免任何握手异常导致板子永远停在彩条页。
+reg  [21:0]      wd_cnt;
+wire             wd_stall = (wd_cnt >= 22'd2_000_000);
+
+always @(posedge clk or posedge rst) begin
+    if (rst || !load_busy)
+        wd_cnt <= 22'd0;
+    else if (write_en)
+        wd_cnt <= 22'd0;
+    else if (!wd_stall)
+        wd_cnt <= wd_cnt + 22'd1;
+end
+
 // 同步 mem_clk 域的 write_finish_toggle
 reg [2:0]        wrfin_tgl_sync;
 wire             write_finish_pulse;
@@ -288,7 +302,7 @@ always @(posedge clk or posedge rst) begin
                 fin_seen <= 1'b1;
 
             // 整帧写完：该槽有效；还有图就继续加载下一槽，全部完成才开显示
-            if (load_busy && source_done_seen && (write_finish_pulse || fin_seen)) begin
+            if (load_busy && (source_done_seen || raw_mode) && (write_finish_pulse || fin_seen || wd_stall)) begin
                 load_busy        <= 1'b0;
                 source_done_seen <= 1'b0;
                 fin_seen         <= 1'b0;
@@ -391,7 +405,7 @@ bmp_read bmp_read_m0(
     .sd_sec_read_end        (sd_sec_read_end),
     .bmp_data_wr_en         (bmp_src_valid),
     .bmp_data               (bmp_src_data),
-    .src_ready              (raw_mode ? 1'b1 : scale_src_ready),
+        .src_ready              (1'b1),   // 预载不反压：源比装载器慢 ~30 倍，FIFO 不会溢出；去掉暂停路径消除握手风险
     .bmp_src_config         (bmp_src_config),
     .bmp_src_width          (bmp_src_width),
     .bmp_src_height         (bmp_src_height),
