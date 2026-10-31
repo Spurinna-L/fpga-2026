@@ -28,6 +28,7 @@ module tb_param_latch;
     reg  [1:0]        img = 2'd0;
     reg  [7:0]        mm  = 8'd0;
     reg  [7:0]        ss  = 8'd0;
+    reg  [2:0]        fx  = 3'd0;   // 风格化滤镜模式（K14）
 
     wire signed [7:0] o_br;
     wire [7:0]        o_cnt;
@@ -37,6 +38,8 @@ module tb_param_latch;
 
     wire [4:0] o_sign, o_bh, o_bl, o_ch, o_cm, o_cl;
     wire [4:0] o_mmh, o_mml, o_ssh, o_ssl, o_img, o_tr;
+    wire [2:0] o_fxm;
+    wire [4:0] o_fxch;
 
     video_param_latch dut (
         .I_clk        (clk),
@@ -50,6 +53,8 @@ module tb_param_latch;
         .I_img_idx    (img),
         .I_time_mm    (mm),
         .I_time_ss    (ss),
+        .I_viz_mode   (2'd0),
+        .I_fx_mode    (fx),
         .O_brightness (o_br),
         .O_contrast   (o_cnt),
         .O_osd_en     (o_en),
@@ -66,7 +71,9 @@ module tb_param_latch;
         .O_ch_ss_hi   (o_ssh),
         .O_ch_ss_lo   (o_ssl),
         .O_ch_img     (o_img),
-        .O_ch_tr      (o_tr)
+        .O_ch_tr      (o_tr),
+        .O_fx_mode    (o_fxm),
+        .O_ch_fx      (o_fxch)
     );
 
     always #20 clk = ~clk;    // 25MHz
@@ -235,6 +242,29 @@ module tb_param_latch;
         vs_pulse;
         exp_prm = {-8'sd64, 8'd255, 1'b1, 1'b1, 2'd1};
         compare("subtitle on");
+
+        //---------------------------------------------------------------------
+        // 9) 滤镜模式（K14）：帧边界整组锁存，O_ch_fx = {2'b00, O_fx_mode}
+        //---------------------------------------------------------------------
+        @(negedge clk);
+        fx = 3'd5;
+        repeat (20) @(posedge clk);
+        vs_pulse;
+        checks = checks + 1;
+        if ((o_fxm !== 3'd5) || (o_fxch !== 5'd5)) begin
+            errors = errors + 1;
+            $display("FAIL fx latch: o_fxm=%0d o_fxch=%0d exp 5/5", o_fxm, o_fxch);
+        end
+
+        @(negedge clk);
+        fx = 3'd7;
+        repeat (20) @(posedge clk);
+        vs_pulse;
+        checks = checks + 1;
+        if ((o_fxm !== 3'd7) || (o_fxch !== 5'd7)) begin
+            errors = errors + 1;
+            $display("FAIL fx latch #2: o_fxm=%0d o_fxch=%0d exp 7/7", o_fxm, o_fxch);
+        end
 
         $display("--------------------------------------------------");
         $display("tb_param_latch: %0d checks, %0d errors", checks, errors);

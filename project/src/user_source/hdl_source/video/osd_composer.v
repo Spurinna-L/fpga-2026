@@ -5,9 +5,10 @@
 //   在画面上叠加一个 3 行 × 20 列、8×16 点阵的字符面板，实时回显：
 //     第 1 行： TIME 00:00 IMG:1/4
 //     第 2 行： BRT:+00 CNT:128 TR:0
-//     第 3 行： MDE:1 TMB:1 SRC:0        （M3 扩展⑤：可视化开关/音色/音源）
-//   其中 mm:ss 每秒跳变、IMG 随切图跳变、BRT/CNT/TR/MDE/TMB/SRC 随按键跳变。
+//     第 3 行： MDE:1 TMB:1 SRC:0 F1   （M3.3：末位 F0..F7 为滤镜模式）
+//   其中 mm:ss 每秒跳变、IMG 随切图跳变、BRT/CNT/TR/MDE/TMB/SRC/FX 随按键跳变。
 //   MDE 只有 0/1 两态：1=波形+频谱同开，0=全关，与 OSD 面板共用 K4 开关。
+//   F0=直通 F1=锐化 F2=线稿 F3=浮雕 F4=卡通 F5=灰度 F6=反色 F7=暖调。
 //
 // 叠加方式（零乘法、零 BRAM）：
 //   字形像素 = 纯白 0xFFFFFF ；
@@ -61,6 +62,7 @@ module osd_composer(
     input  wire [4:0]        I_ss_lo,
     input  wire [4:0]        I_img,
     input  wire [4:0]        I_tr,
+    input  wire [4:0]        I_fx,
     input  wire [4:0]        I_viz_mode,
     input  wire [4:0]        I_timbre,
     input  wire [4:0]        I_audio_src,
@@ -95,6 +97,7 @@ module osd_composer(
     localparam [4:0] CH_G     = 5'd23;
     localparam [4:0] CH_D     = 5'd26;
     localparam [4:0] CH_S     = 5'd27;
+    localparam [4:0] CH_F     = 5'd25;    // 滤镜模式前缀 'F'
 
     //-------------------------------------------------------------------------
     // 坐标 → 面板内位置
@@ -175,7 +178,7 @@ module osd_composer(
                 default: ch = CH_SP;
             endcase
         end else begin
-            // 第 3 行：MDE:1 TMB:1 SRC:0
+            // 第 3 行：MDE:1 TMB:1 SRC:0 F1
             case (col)
                 5'd0 : ch = CH_M;
                 5'd1 : ch = CH_D;
@@ -194,6 +197,9 @@ module osd_composer(
                 5'd14: ch = CH_C;
                 5'd15: ch = CH_COLON;
                 5'd16: ch = I_audio_src;
+                5'd17: ch = CH_SP;
+                5'd18: ch = CH_F;
+                5'd19: ch = I_fx;
                 default: ch = CH_SP;
             endcase
         end

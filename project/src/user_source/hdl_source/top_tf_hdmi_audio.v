@@ -745,6 +745,7 @@ module top(
     wire [1:0]  regs_audio_src;
     wire [1:0]  regs_viz_mode;
     wire [1:0]  regs_timbre;
+    wire [2:0]  regs_fx_mode;
     wire [7:0]  regs_time_mm;
     wire [7:0]  regs_time_ss;
     wire        regs_tick_1hz;
@@ -765,6 +766,7 @@ module top(
         .audio_src    (regs_audio_src),
         .viz_mode     (regs_viz_mode),
         .timbre       (regs_timbre),
+        .fx_mode      (regs_fx_mode),
         .time_mm      (regs_time_mm),
         .time_ss      (regs_time_ss),
         .tick_1hz     (regs_tick_1hz),
@@ -842,8 +844,8 @@ module top(
     // mixer 之后的视频后处理：亮度/对比度 + 参数 OSD + 左上角 Logo（M2 扩展④）
     //   参数在 50MHz 按键域，视频在 25MHz 像素域 → video_post 内部用
     //   video_param_latch 做「2FF + 连续稳定检测 + vs 帧边界整组锁存」，
-    //   再串 video_proc（2 拍）、audio_viz（1 拍）与 osd_composer / logo_overlay
-    //   （均为组合，0 拍），并把 hs/vs 同步延迟 3 拍。
+    //   再串 video_fx（3 拍，风格化滤镜）、video_proc（2 拍）、audio_viz（1 拍）
+    //   与 osd_composer / logo_overlay（均为组合，0 拍），并把 hs/vs 同步延迟 6 拍。
     //   开关：osd_en（K4）同时控制「右上角参数面板」「左上角 Logo」和「音频可视化
     //   （波形 + 频谱）」，三者共用 video_post 内部同一份已同步信号 prm_osd_en /
     //   prm_viz_mode，同帧同时开关。
@@ -869,6 +871,7 @@ module top(
         .audio_src  (regs_audio_src),
         .audio_timbre(regs_timbre),
         .viz_mode   (regs_viz_mode),
+        .fx_mode    (regs_fx_mode),
         .audio_valid(audio_valid),
         .audio_sample(audio_left_data),
         .rgb_out    (post_rgb),

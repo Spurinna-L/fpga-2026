@@ -3,7 +3,7 @@
 // tb_video_post.v — video_post 自检（iverilog / ModelSim 通用）
 //-----------------------------------------------------------------------------
 // 验证内容：
-//   1) 亮度 0 / 对比度 128 时，rgb/hs/vs/de/x/y 全部严格延迟 2 拍后原样输出；
+//   1) 亮度 0 / 对比度 128 / 滤镜直通时，rgb/hs/vs/de/x/y 全部严格延迟 6 拍后原样输出；
 //   2) 亮度 +8 / -8 生效，且 0/255 两端饱和不环绕；
 //   3) 对比度 64 / 192 方向正确（暗的更暗、亮的更亮）；
 //   4) hs/vs 与像素同一延迟，不会出现同步头错位。
@@ -24,6 +24,7 @@ module tb_video_post;
     reg  [7:0]        ct     = 8'd128;
     reg               osd_en = 1'b0;   // 本测试关闭 OSD/Logo，验证逐像素直通
     reg               subtitle_en = 1'b0;
+    reg  [2:0]        fx_mode = 3'd0;  // 滤镜直通
 
     wire [23:0] rgb_out;
     wire        hs_out, vs_out, de_out;
@@ -47,6 +48,11 @@ module tb_video_post;
         .img_idx    (2'd0),
         .trans_mode (2'd0),
         .audio_src  (2'd0),
+        .audio_timbre(2'd0),
+        .viz_mode   (2'd0),
+        .fx_mode    (fx_mode),
+        .audio_valid(1'b0),
+        .audio_sample(24'sd0),
         .rgb_out    (rgb_out),
         .hs_out     (hs_out),
         .vs_out     (vs_out),
@@ -100,7 +106,7 @@ module tb_video_post;
         end
     endtask
 
-    // 单个像素检查：调好参数后送 1 个像素，2 拍后比对
+    // 单个像素检查：调好参数后送 1 个像素，6 拍后比对
     task chk_pixel;
         input [23:0]       din;
         input [9:0]        px;
@@ -112,14 +118,13 @@ module tb_video_post;
             ct = k;
             repeat (16) @(posedge clk);   // 2FF + 稳定计数（8 拍）+ 余量
             pulse_vs;                     // vs 边界整组锁存
-            repeat (4) @(posedge clk);    // 锁存后到 video_proc 输出
+            repeat (4) @(posedge clk);    // 锁存后到流水输出
             @(negedge clk);
             rgb_in = din;
             x_in   = px;
             y_in   = py;
             de_in  = 1'b1;
-            @(posedge clk);
-            @(posedge clk);
+            repeat (6) @(posedge clk);    // fx(3) + proc(2) + viz(1) = 6 拍
             #1;
             checks = checks + 1;
             if (rgb_out !== ref_rgb(din, k, b)) begin
@@ -138,20 +143,20 @@ module tb_video_post;
     endtask
 
     //-------------------------------------------------------------------------
-    // 延迟检查：连续送 8 个像素，验证 rgb/hs/vs/de/x/y 都延迟 2 拍
+    // 延迟检查：连续送 8 个像素，验证 rgb/hs/vs/de/x/y 都延迟 6 拍
     //-------------------------------------------------------------------------
-    reg [23:0] h_rgb [0:3];
-    reg [9:0]  h_x   [0:3];
-    reg [9:0]  h_y   [0:3];
-    reg        h_hs  [0:3];
-    reg        h_vs  [0:3];
-    reg        h_de  [0:3];
+    reg [23:0] h_rgb [0:7];
+    reg [9:0]  h_x   [0:7];
+    reg [9:0]  h_y   [0:7];
+    reg        h_hs  [0:7];
+    reg        h_vs  [0:7];
+    reg        h_de  [0:7];
 
     integer i;
     integer n;
 
     initial begin
-        for (i = 0; i < 4; i = i + 1) begin
+        for (i = 0; i < 8; i = i + 1) begin
             h_rgb[i] = 24'd0;
             h_x[i]   = 10'd0;
             h_y[i]   = 10'd0;
@@ -193,18 +198,18 @@ module tb_video_post;
             @(posedge clk);
             #1;
 
-            // 影子寄存器：[2] = 2 拍前的输入
+            // 影子寄存器：[5] = 6 拍前的输入
             checks = checks + 1;
-            if (rgb_out !== h_rgb[1]) begin
+            if (rgb_out !== h_rgb[5]) begin
                 errors = errors + 1;
-                $display("FAIL identity rgb @%0d: out=%h exp=%h", n, rgb_out, h_rgb[1]);
+                $display("FAIL identity rgb @%0d: out=%h exp=%h", n, rgb_out, h_rgb[5]);
             end
-            if (x_out !== h_x[1] || y_out !== h_y[1] ||
-                de_out !== h_de[1] || hs_out !== h_hs[1] || vs_out !== h_vs[1]) begin
+            if (x_out !== h_x[5] || y_out !== h_y[5] ||
+                de_out !== h_de[5] || hs_out !== h_hs[5] || vs_out !== h_vs[5]) begin
                 errors = errors + 1;
                 $display("FAIL identity sideband @%0d: x=%0d/%0d y=%0d/%0d de=%b/%b hs=%b/%b vs=%b/%b",
-                         n, x_out, h_x[1], y_out, h_y[1],
-                         de_out, h_de[1], hs_out, h_hs[1], vs_out, h_vs[1]);
+                         n, x_out, h_x[5], y_out, h_y[5],
+                         de_out, h_de[5], hs_out, h_hs[5], vs_out, h_vs[5]);
             end
         end
 
@@ -242,7 +247,7 @@ module tb_video_post;
     // 影子寄存器更新（与 DUT 输入同拍）
     //-------------------------------------------------------------------------
     always @(posedge clk) begin
-        for (i = 0; i < 3; i = i + 1) begin
+        for (i = 0; i < 7; i = i + 1) begin
             h_rgb[i+1] <= h_rgb[i];
             h_x[i+1]   <= h_x[i];
             h_y[i+1]   <= h_y[i];

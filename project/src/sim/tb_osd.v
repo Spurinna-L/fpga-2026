@@ -7,6 +7,7 @@
 //   3) 面板内：字形像素 = 0xFFFFFF，非字形像素 = 每通道右移 1 位
 //   4) 行间 2px 空隙不画字（直通）
 //   5) 排版表位置正确：逐像素与「独立字库实例 + 独立排版函数」对照
+//      （3 行 20 列全扫，含第 3 行的滤镜模式 F0..F7）
 //
 // 用法（ModelSim）：
 //   vlog font_ascii_8x16.v osd_composer.v tb_osd.v
@@ -37,6 +38,10 @@ module tb_osd;
     reg  [4:0]  i_ss_lo    = 5'd2;
     reg  [4:0]  i_img      = 5'd1;
     reg  [4:0]  i_tr       = 5'd0;
+    reg  [4:0]  i_fx       = 5'd1;
+    reg  [4:0]  i_viz      = 5'd3;    // viz_mode = 2'b11 -> 字符 '3'
+    reg  [4:0]  i_tmb      = 5'd1;
+    reg  [4:0]  i_src      = 5'd0;
 
     wire        o_de;
     wire [9:0]  o_x, o_y;
@@ -60,6 +65,10 @@ module tb_osd;
         .I_ss_lo    (i_ss_lo),
         .I_img      (i_img),
         .I_tr       (i_tr),
+        .I_fx       (i_fx),
+        .I_viz_mode (i_viz),
+        .I_timbre   (i_tmb),
+        .I_audio_src(i_src),
         .O_de       (o_de),
         .O_x        (o_x),
         .O_y        (o_y),
@@ -87,10 +96,10 @@ module tb_osd;
     //-------------------------------------------------------------------------
     function [4:0] calc_ch;
         input integer col;
-        input integer line2;
+        input integer line_idx;          // 0=第1行 1=第2行 2=第3行
         begin
             calc_ch = 5'd14;                 // 空格
-            if (line2 == 0) begin
+            if (line_idx == 0) begin
                 case (col)
                     0 : calc_ch = 5'd15;     // T
                     1 : calc_ch = 5'd16;     // I
@@ -112,7 +121,7 @@ module tb_osd;
                     17: calc_ch = 5'd4;      // '4'
                     default: calc_ch = 5'd14;
                 endcase
-            end else begin
+            end else if (line_idx == 1) begin
                 case (col)
                     0 : calc_ch = 5'd19;     // B
                     1 : calc_ch = 5'd20;     // R
@@ -136,6 +145,31 @@ module tb_osd;
                     19: calc_ch = i_tr;
                     default: calc_ch = 5'd14;
                 endcase
+            end else begin
+                // 第 3 行：MDE:1 TMB:1 SRC:0 F1
+                case (col)
+                    0 : calc_ch = 5'd17;     // M
+                    1 : calc_ch = 5'd26;     // D
+                    2 : calc_ch = 5'd18;     // E
+                    3 : calc_ch = 5'd10;     // :
+                    4 : calc_ch = i_viz;
+                    5 : calc_ch = 5'd14;     // SP
+                    6 : calc_ch = 5'd15;     // T
+                    7 : calc_ch = 5'd17;     // M
+                    8 : calc_ch = 5'd19;     // B
+                    9 : calc_ch = 5'd10;     // :
+                    10: calc_ch = i_tmb;
+                    11: calc_ch = 5'd14;     // SP
+                    12: calc_ch = 5'd27;     // S
+                    13: calc_ch = 5'd20;     // R
+                    14: calc_ch = 5'd21;     // C
+                    15: calc_ch = 5'd10;     // :
+                    16: calc_ch = i_src;
+                    17: calc_ch = 5'd14;     // SP
+                    18: calc_ch = 5'd25;     // F
+                    19: calc_ch = i_fx;
+                    default: calc_ch = 5'd14;
+                endcase
             end
         end
     endfunction
@@ -152,7 +186,7 @@ module tb_osd;
     // 逐点检查
     //-------------------------------------------------------------------------
     integer xx, yy;
-    integer dx, dy, col, row5, subx, line2;
+    integer dx, dy, col, row5, subx, line_idx;
     reg     in_panel, in_row;
     reg [23:0] exp_rgb;
 
@@ -162,17 +196,17 @@ module tb_osd;
             dy = yy - 8;
             col  = (dx >> 3) & 31;
             subx = dx & 7;
-            line2 = (dy >= 18) ? 1 : 0;
-            row5  = line2 ? (dy - 18) : dy;
+            line_idx = (dy >= 36) ? 2 : ((dy >= 18) ? 1 : 0);
+            row5  = dy - line_idx * 18;
 
-            in_panel = (de == 1'b1) && (dx >= 0) && (dx < 160) && (dy >= 0) && (dy < 34);
+            in_panel = (de == 1'b1) && (dx >= 0) && (dx < 160) && (dy >= 0) && (dy < 52);
             in_row   = (row5 >= 0) && (row5 < 16);
 
             // 驱动 DUT 与探针
             x = xx[9:0];
             y = yy[9:0];
             if (in_row) begin
-                probe_code = calc_ch(col, line2);
+                probe_code = calc_ch(col, line_idx);
                 probe_row  = row5[3:0];
             end else begin
                 probe_code = 5'd14;
@@ -240,6 +274,10 @@ module tb_osd;
         i_ss_lo    = 5'd9;
         i_img      = 5'd4;
         i_tr       = 5'd2;
+        i_fx       = 5'd7;
+        i_viz      = 5'd0;
+        i_tmb      = 5'd2;
+        i_src      = 5'd1;
         rgb        = 24'hFE_DC_BA;
 
         for (yy = 0; yy < 50; yy = yy + 1)

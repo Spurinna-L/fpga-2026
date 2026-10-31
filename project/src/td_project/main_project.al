@@ -427,6 +427,14 @@
                     <Attr Name="CompileOrder" Val="48"/>
                 </FileInfo>
             </File>
+            <File Path="../user_source/hdl_source/video/video_fx.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="49"/>
+                </FileInfo>
+            </File>
             <File Path="../user_source/hdl_source/video/video_param_latch.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
@@ -667,6 +675,15 @@
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="84"/>
+                </FileInfo>
+            </File>
+            <File Path="../sim/tb_video_post.v">
+                <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="85"/>
                 </FileInfo>
             </File>
         </Verilog>

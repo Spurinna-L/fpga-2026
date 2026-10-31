@@ -5,11 +5,15 @@
 // 本版已完成 M2 扩展④：实时亮度/对比度 + 参数 OSD 字符面板 + 左上角 Logo 图层。
 // 扩展⑤：底部中文滚动字幕（scroll_text_overlay，K13 开关）。
 // M3 扩展⑤：音频可视化图层 audio_viz（波形 + 8 段频谱柱，与 OSD 面板共用 K4 开关）。
-// 链路：rgb_in → video_proc（2 拍）→ audio_viz（1 拍）→ osd_composer（组合）
-//        → logo_overlay（组合）→ scroll_text_overlay（组合）→ rgb_out
+// M3.3 自选创新：实时风格化滤镜 video_fx（锐化/线稿/浮雕/卡通/灰度/反色/暖调，K14 切）。
+// 链路：rgb_in → video_fx（3 拍）→ video_proc（2 拍）→ audio_viz（1 拍）
+//        → osd_composer（组合）→ logo_overlay（组合）→ scroll_text_overlay（组合）→ rgb_out
 //   - 输入 rgb_in/hs_in/vs_in/de_in/x_in/y_in 已与 mixer 输出严格同拍；
-//   - 输出 rgb_out/hs_out/vs_out/de_out/x_out/y_out 与输入相差 3 拍；
-//   - hs/vs 在模块内一起延迟 3 拍，与 de/x/y/rgb 保持同拍；
+//   - 输出 rgb_out/hs_out/vs_out/de_out/x_out/y_out 与输入相差 6 拍；
+//   - hs/vs 在模块内一起延迟 6 拍，与 de/x/y/rgb 保持同拍；
+//   - video_fx 放在 video_proc **之前**：先风格化再做亮度/对比度，
+//     这样卡通/线稿也能被亮度键压暗，语义上更自然；fx_mode=0 时该级只是
+//     纯 3 拍延迟（逐像素 bit-exact 直通），画面与合入前完全一致。
 //   - audio_viz 之所以是 1 拍：波形 RAM 读延迟 1 拍，模块内部把 de/x/y/rgb
 //     一起再打一拍，输出端仍然严格同拍；viz_mode=0 时它只是纯延迟，画面不变。
 //   - osd_composer / logo_overlay / scroll_text_overlay 都是**纯组合**（0 拍），
@@ -45,6 +49,7 @@ module video_post (
     input  wire [1:0]        audio_src,
     input  wire [1:0]        audio_timbre,  // 合成器音色（K10），仅 OSD 回显
     input  wire [1:0]        viz_mode,      // 音频可视化开关，由 osd_en 派生（K4 同一个键）
+    input  wire [2:0]        fx_mode,       // 风格化滤镜模式（K14），0=直通
     input  wire              audio_valid,   // 48kHz 音频样本有效（I2S 解串）
     input  wire signed [23:0] audio_sample, // 24bit 有符号 PCM
 
@@ -66,11 +71,12 @@ module video_post (
     wire              prm_subtitle_en;
     wire [1:0]        prm_trans_mode;
     wire [1:0]        prm_viz_mode;
+    wire [2:0]        prm_fx_mode;
 
     wire [4:0] ch_brt_sign, ch_brt_hi, ch_brt_lo;
     wire [4:0] ch_cnt_h, ch_cnt_m, ch_cnt_l;
     wire [4:0] ch_mm_hi, ch_mm_lo, ch_ss_hi, ch_ss_lo;
-    wire [4:0] ch_img, ch_tr;
+    wire [4:0] ch_img, ch_tr, ch_fx;
     video_param_latch u_prm (
         .I_clk        (clk),
         .I_rst        (rst),
@@ -81,6 +87,7 @@ module video_post (
         .I_subtitle_en(subtitle_en),
         .I_trans_mode (trans_mode),
         .I_viz_mode   (viz_mode),
+        .I_fx_mode    (fx_mode),
         .I_img_idx    (img_idx),
         .I_time_mm    (time_mm),
         .I_time_ss    (time_ss),
@@ -90,6 +97,7 @@ module video_post (
         .O_subtitle_en(prm_subtitle_en),
         .O_trans_mode (prm_trans_mode),
         .O_viz_mode   (prm_viz_mode),
+        .O_fx_mode    (prm_fx_mode),
         .O_ch_brt_sign(ch_brt_sign),
         .O_ch_brt_hi  (ch_brt_hi),
         .O_ch_brt_lo  (ch_brt_lo),
@@ -101,7 +109,31 @@ module video_post (
         .O_ch_ss_hi   (ch_ss_hi),
         .O_ch_ss_lo   (ch_ss_lo),
         .O_ch_img     (ch_img),
-        .O_ch_tr      (ch_tr)
+        .O_ch_tr      (ch_tr),
+        .O_ch_fx      (ch_fx)
+    );
+
+    //-------------------------------------------------------------------------
+    // ①.5 实时风格化滤镜（3 拍，自选创新）
+    //     自带 1 条行延迟 RAM（行号奇偶分 bank 的 PDPW，读写同一个 BRAM），
+    //     不访问 SDRAM、不用 DSP；fx_mode=0 时只是纯 3 拍延迟。
+    //-------------------------------------------------------------------------
+    wire        fx_de;
+    wire [9:0]  fx_x, fx_y;
+    wire [23:0] fx_rgb;
+
+    video_fx u_fx (
+        .I_clk  (clk),
+        .I_rst  (rst),
+        .I_mode (prm_fx_mode),
+        .I_de   (de_in),
+        .I_x    (x_in),
+        .I_y    (y_in),
+        .I_rgb  (rgb_in),
+        .O_de   (fx_de),
+        .O_x    (fx_x),
+        .O_y    (fx_y),
+        .O_rgb  (fx_rgb)
     );
 
     //-------------------------------------------------------------------------
@@ -115,10 +147,10 @@ module video_post (
     video_proc u_proc (
         .I_clk        (clk),
         .I_rst        (rst),
-        .I_de         (de_in),
-        .I_x          (x_in),
-        .I_y          (y_in),
-        .I_rgb        (rgb_in),
+        .I_de         (fx_de),
+        .I_x          (fx_x),
+        .I_y          (fx_y),
+        .I_rgb        (fx_rgb),
         .I_brightness (prm_brightness),
         .I_contrast   (prm_contrast),
         .O_de         (proc_de),
@@ -179,6 +211,7 @@ module video_post (
         .I_ss_lo    (ch_ss_lo),
         .I_img      (ch_img),
         .I_tr       (ch_tr),
+        .I_fx       (ch_fx),
         .I_viz_mode ({4'd0, prm_viz_mode[1]}),   // 0/1：波形+频谱同开/全关
         .I_timbre   ({3'b000, audio_timbre}),
         .I_audio_src({3'b000, audio_src}),
@@ -233,24 +266,38 @@ module video_post (
     );
 
     //-------------------------------------------------------------------------
-    // ⑦ hs/vs 跟随 video_proc(2 拍) + audio_viz(1 拍) = 3 拍延迟，保证全部边带同拍
+    // ⑦ hs/vs 跟随 video_fx(3) + video_proc(2) + audio_viz(1) = 6 拍延迟，
+    //    保证全部边带同拍
     //-------------------------------------------------------------------------
-    reg hs_d1, hs_d2, hs_d3, vs_d1, vs_d2, vs_d3;
+    reg hs_d1, hs_d2, hs_d3, hs_d4, hs_d5, hs_d6;
+    reg vs_d1, vs_d2, vs_d3, vs_d4, vs_d5, vs_d6;
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             hs_d1 <= 1'b1;
             hs_d2 <= 1'b1;
             hs_d3 <= 1'b1;
+            hs_d4 <= 1'b1;
+            hs_d5 <= 1'b1;
+            hs_d6 <= 1'b1;
             vs_d1 <= 1'b1;
             vs_d2 <= 1'b1;
             vs_d3 <= 1'b1;
+            vs_d4 <= 1'b1;
+            vs_d5 <= 1'b1;
+            vs_d6 <= 1'b1;
         end else begin
             hs_d1 <= hs_in;
             hs_d2 <= hs_d1;
             hs_d3 <= hs_d2;
+            hs_d4 <= hs_d3;
+            hs_d5 <= hs_d4;
+            hs_d6 <= hs_d5;
             vs_d1 <= vs_in;
             vs_d2 <= vs_d1;
             vs_d3 <= vs_d2;
+            vs_d4 <= vs_d3;
+            vs_d5 <= vs_d4;
+            vs_d6 <= vs_d5;
         end
     end
 
@@ -258,7 +305,7 @@ module video_post (
     assign de_out  = st_de;
     assign x_out   = st_x;
     assign y_out   = st_y;
-    assign hs_out  = hs_d3;
-    assign vs_out  = vs_d3;
+    assign hs_out  = hs_d6;
+    assign vs_out  = vs_d6;
 
 endmodule

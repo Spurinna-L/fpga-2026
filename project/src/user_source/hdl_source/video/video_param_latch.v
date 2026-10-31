@@ -25,12 +25,14 @@
 //   I_subtitle_en             底部滚动字幕开关（K13）
 //   I_trans_mode[1:0]          转场模式 0..2
 //   I_viz_mode[1:0]            音频可视化开关 2'b11=波形+频谱同开 / 2'b00=全关
+//   I_fx_mode[2:0]              风格化滤镜模式 0..7（K14 循环，0=直通）
 //   I_img_idx[1:0]             当前图片序号 0..3
 //   I_time_mm / I_time_ss[7:0] 上电计时
 //
 // 输出（像素域，帧内恒定）：
 //   O_brightness / O_contrast / O_osd_en / O_subtitle_en / O_trans_mode
 //   O_viz_mode                 原样供 video_proc / audio_viz / 字幕图层使用
+//   O_fx_mode[2:0]             原样供 video_fx 使用
 //   O_ch_*[4:0]                 OSD 字符码（见 font_ascii_8x16.v 码表）
 //
 // 字符码约定（与 font_ascii_8x16.v 严格一致）：
@@ -64,6 +66,7 @@ module video_param_latch #(
     input  wire               I_subtitle_en,
     input  wire [1:0]         I_trans_mode,
     input  wire [1:0]         I_viz_mode,
+    input  wire [2:0]         I_fx_mode,
     input  wire [1:0]         I_img_idx,
     input  wire [7:0]         I_time_mm,
     input  wire [7:0]         I_time_ss,
@@ -75,6 +78,7 @@ module video_param_latch #(
     output reg                O_subtitle_en,
     output reg  [1:0]         O_trans_mode,
     output reg  [1:0]         O_viz_mode,
+    output reg  [2:0]         O_fx_mode,
 
     // ---- OSD 字符码 ----
     output reg  [4:0]         O_ch_brt_sign,  // '+' 或 '-'
@@ -88,13 +92,15 @@ module video_param_latch #(
     output reg  [4:0]         O_ch_ss_hi,     // 秒钟十位
     output reg  [4:0]         O_ch_ss_lo,     // 秒钟个位
     output reg  [4:0]         O_ch_img,       // 图片号 1..4
-    output reg  [4:0]         O_ch_tr         // 转场模式 0..2
+    output reg  [4:0]         O_ch_tr,        // 转场模式 0..2
+    output reg  [4:0]         O_ch_fx         // 滤镜模式 0..7（仅显示个位）
 );
 
     //-------------------------------------------------------------------------
     // 参数总线打包（顺序固定，只用于「整体是否变化」的比较和整组锁存）
     //-------------------------------------------------------------------------
-    wire [39:0] prm_bus = {
+    wire [42:0] prm_bus = {
+        I_fx_mode,      // [42:40]
         I_viz_mode,     // [39:38]
         I_brightness,   // [37:30]
         I_contrast,     // [29:22]
@@ -109,14 +115,14 @@ module video_param_latch #(
     //-------------------------------------------------------------------------
     // 2FF 同步 + 稳定检测
     //-------------------------------------------------------------------------
-    reg [39:0] sync0, sync1, sync1_d;
+    reg [42:0] sync0, sync1, sync1_d;
     reg [3:0]  stable_cnt;
 
     always @(posedge I_clk or posedge I_rst) begin
         if (I_rst) begin
-            sync0      <= 40'd0;
-            sync1      <= 40'd0;
-            sync1_d    <= 40'd0;
+            sync0      <= 43'd0;
+            sync1      <= 43'd0;
+            sync1_d    <= 43'd0;
             stable_cnt <= 4'd0;
         end else begin
             sync0   <= prm_bus;
@@ -153,6 +159,7 @@ module video_param_latch #(
     wire              sub = sync1[20];
     wire [1:0]        trm = sync1[19:18];
     wire [1:0]        viz = sync1[39:38];
+    wire [2:0]        fxm = sync1[42:40];
     wire [1:0]        img = sync1[17:16];
     wire [7:0]        mm  = sync1[15:8];
     wire [7:0]        ss  = sync1[7:0];
@@ -188,6 +195,7 @@ module video_param_latch #(
             O_subtitle_en <= 1'b1;
             O_trans_mode <= 2'd0;
             O_viz_mode   <= 2'd3;
+            O_fx_mode    <= 3'd0;
 
             O_ch_brt_sign <= 5'd12;   // '+'
             O_ch_brt_hi   <= 5'd0;
@@ -201,6 +209,7 @@ module video_param_latch #(
             O_ch_ss_lo    <= 5'd0;
             O_ch_img      <= 5'd1;
             O_ch_tr       <= 5'd0;
+            O_ch_fx       <= 5'd0;
         end else if (vs_fall && prm_stable) begin
             O_brightness <= br;
             O_contrast   <= cnt;
@@ -208,6 +217,7 @@ module video_param_latch #(
             O_subtitle_en <= sub;
             O_trans_mode <= trm;
             O_viz_mode   <= viz;
+            O_fx_mode    <= fxm;
 
             O_ch_brt_sign <= (br < 8'sd0) ? 5'd13 : 5'd12;   // '-' : '+'
             O_ch_brt_hi   <= {1'b0, br_hi};
@@ -221,6 +231,7 @@ module video_param_latch #(
             O_ch_ss_lo    <= {1'b0, ss_lo};
             O_ch_img      <= img_ch;
             O_ch_tr       <= {3'd0, trm};
+            O_ch_fx       <= {2'b00, fxm};
         end
     end
 

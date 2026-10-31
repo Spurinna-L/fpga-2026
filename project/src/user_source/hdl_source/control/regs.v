@@ -22,6 +22,7 @@
 //   out subtitle_en          底部滚动字幕开关（K13）
 //   out audio_src/timbre     音源 L1/L2、L2 音色
 //   out viz_mode             音频可视化开关，由 osd_en 派生：11=波形+频谱同开 / 00=全关
+//   out fx_mode[2:0]         实时风格化滤镜模式 0..7（K14 循环，0=直通）
 //   out time_mm/time_ss/tick_1hz  时间戳与 1Hz 脉冲
 //   out seg_value[31:0]      数码管显示值（4 位 × 4bit）
 //   out key_press[15:0]      单拍按下脉冲（当前顶层未消费，保留给后续模块）
@@ -33,7 +34,7 @@
 //   [0] 下一张 / [1] 自动轮播（直接送 sd_card_bmp，本模块只旁路）
 //   [2] 转场模式  [3] OSD 开关（面板 + Logo + 音频可视化，同一个键）
 //   [4]/[5] 亮度 +/-8  [6]/[7] 对比度 +/-16  [8] 音源  [9] 音色
-//   [11] 参数一键复位  [12] 底部滚动字幕开关  [10]/[13]~[15] 预留
+//   [11] 参数一键复位  [12] 底部滚动字幕开关  [13] 风格化滤镜循环  [10]/[14]/[15] 预留
 //
 // 数码管 4 位（高位在左）：
 //   [15:12] SD 状态码  [11:8] 图片序号  [7:4] 转场/OSD  [3:0] 音源/可视化(0/1)
@@ -63,6 +64,7 @@ module regs
     output reg  [1:0]  audio_src,      // 0=L1 1=L2
     output wire [1:0]  viz_mode,       // 由 osd_en 派生：11=波形+频谱同开 00=全关
     output reg  [1:0]  timbre,
+    output reg  [2:0]  fx_mode,        // 风格化滤镜模式 0..7（0=直通）
 
     output reg  [7:0]  time_mm,        // 00..99
     output reg  [7:0]  time_ss,        // 00..59
@@ -129,6 +131,7 @@ module regs
             subtitle_en <= 1'b1;
             audio_src  <= 2'd0;
             timbre     <= 2'd0;
+            fx_mode    <= 3'd0;
         end else begin
             if (key_press[11]) begin
                 brightness <= 8'sd0;
@@ -138,6 +141,7 @@ module regs
                 subtitle_en <= 1'b1;
                 audio_src  <= 2'd0;
                 timbre     <= 2'd0;
+                fx_mode    <= 3'd0;
             end else begin
                 if (key_press[2])
                     trans_mode <= (trans_mode == 2'd2) ? 2'd0 : (trans_mode + 2'd1);
@@ -157,6 +161,8 @@ module regs
                     audio_src <= (audio_src == 2'd0) ? 2'd1 : 2'd0;
                 if (key_press[9])
                     timbre <= (timbre == 2'd2) ? 2'd0 : (timbre + 2'd1);
+                if (key_press[13])
+                    fx_mode <= (fx_mode == 3'd7) ? 3'd0 : (fx_mode + 3'd1);
             end
         end
     end
