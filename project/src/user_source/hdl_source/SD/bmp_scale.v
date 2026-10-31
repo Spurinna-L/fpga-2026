@@ -49,6 +49,7 @@ module bmp_scale #(
     // 源像素流（来自 bmp_read）
     input  wire        src_valid,
     input  wire [23:0] src_data,
+    input  wire        src_sop,      // 源行首标志（与 src_valid 同拍）
     input  wire        src_config,     // 单拍：新图配置，W/H 有效
     input  wire [15:0] src_width,
     input  wire [15:0] src_height,
@@ -56,16 +57,14 @@ module bmp_scale #(
     // 输出到 frame_read_write
     output wire        out_valid,
     output wire [23:0] out_data,
+    output wire        out_sop,       // 行首标志，与 out_valid/out_data 同拍
     output wire        out_done,
 
     // 源端反压：FIFO 高水位时拉低，bmp_read 在扇区边界暂停
     output wire        src_ready,
 
     // 源端已读完（旁路模式用它补黑到满帧）
-    input  wire        src_eof,
-
-    // 诊断：当前是否走了 640×480 逐像素旁路
-    output wire        dbg_bypass
+    input  wire        src_eof
 );
 
     localparam integer PIXELS = DST_W * DST_H;
@@ -257,27 +256,33 @@ module bmp_scale #(
     // 1:1 旁路（640×480 源图不经过缩放，保证与 M2 逐像素一致）
     //---------------------------------------------------------------------
     reg        byp_valid;
+    reg        byp_sop;
     reg        eof_seen;
     reg        pad_row;      // 1=当前行在用黑像素补齐（源已读完）
     reg [23:0] byp_data;
     reg        byp_done;
     reg [18:0] byp_cnt;
 
+    // 行首标志直接取源端的 src_sop（与 src_valid 同拍），不再用计数器推断行宽；
+    // 这样源端丢/多一个像素只会影响当前行，不会让后面的行整体平移。
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             byp_valid <= 1'b0;
+            byp_sop   <= 1'b0;
             byp_data  <= 24'd0;
             byp_done  <= 1'b0;
             byp_cnt   <= 19'd0;
             eof_seen  <= 1'b0;
         end else if (src_config) begin
             byp_valid <= 1'b0;
+            byp_sop   <= 1'b0;
             byp_data  <= 24'd0;
             byp_done  <= 1'b0;
             byp_cnt   <= 19'd0;
             eof_seen  <= 1'b0;
         end else begin
             byp_valid <= 1'b0;
+            byp_sop   <= 1'b0;
             byp_done  <= 1'b0;
             if (src_eof)
                 eof_seen <= 1'b1;
@@ -286,6 +291,7 @@ module bmp_scale #(
                 if (src_valid) begin
                     // 正常像素
                     byp_valid <= 1'b1;
+                    byp_sop   <= src_sop;
                     byp_data  <= src_data;
                     byp_cnt   <= byp_cnt + 19'd1;
                     if (byp_cnt == PIXELS - 1)
@@ -294,6 +300,7 @@ module bmp_scale #(
                     // 源像素不足 307200（板端实测会少几百个）：补黑到满帧，
                     // 保证 frame_write 一定能收满 307200 字、预载流程不卡死。
                     byp_valid <= 1'b1;
+                    byp_sop   <= 1'b0;
                     byp_data  <= 24'd0;
                     byp_cnt   <= byp_cnt + 19'd1;
                     if (byp_cnt == PIXELS - 1)
@@ -310,22 +317,26 @@ module bmp_scale #(
     //---------------------------------------------------------------------
     reg [FIFO_AW-1:0] fifo_wr_ptr, fifo_rd_ptr;
     reg [FIFO_AW:0]   fifo_cnt;
-    wire [23:0]       fifo_dout;
+    wire [24:0]       fifo_dout;    // {行首标志, 24bit RGB}
     reg               fifo_rd_en;   // 只由装载器驱动
+
+    wire [23:0] fifo_pix = fifo_dout[23:0];
+    wire        fifo_sop = fifo_dout[24];
 
     wire fifo_full  = (fifo_cnt == (1 << FIFO_AW));
     wire fifo_empty = (fifo_cnt == 0);
     wire fifo_wr    = src_valid && !bypass && !fifo_full;
 
     // 显式用 PDPW BRAM 做 FIFO 存储，避免综合成 1024×24 分布式 RAM
+    // 宽度 25：第 25 位是源行首标志，与像素同路穿过 FIFO（不会错拍）
     line_buffer #(
-        .WIDTH     (24),
+        .WIDTH     (25),
         .ADDR_BITS (FIFO_AW)
     ) u_fifo (
         .wr_clk  (clk),
         .wr_en   (fifo_wr),
         .wr_addr (fifo_wr_ptr),
-        .wr_data (src_data),
+        .wr_data ({src_sop, src_data}),
         .rd_clk  (clk),
         .rd_addr (fifo_rd_ptr),
         .rd_data (fifo_dout)
@@ -358,6 +369,8 @@ module bmp_scale #(
     //---------------------------------------------------------------------
     wire       ld_we;
     reg [10:0] ld_row, ld_x;
+    reg        fill_row;        // 1=正在补黑补齐一行（供 lb_wdata 使用）
+    reg        sop_seen;        // 本图已出现源行首标志
 
     reg [10:0] buf_row_a, buf_row_b;
     reg        buf_ready_a, buf_ready_b;
@@ -376,7 +389,7 @@ module bmp_scale #(
     wire        lb_we_b = ld_we && (ld_row[0] == 1'b1);
     wire [10:0] lb_waddr_a = ld_x;
     wire [10:0] lb_waddr_b = ld_x;
-    wire [23:0] lb_wdata   = pad_row ? 24'd0 : fifo_dout;
+    wire [23:0] lb_wdata   = (pad_row || fill_row) ? 24'd0 : fifo_pix;
 
     reg [10:0]  rd_addr;
     reg         rd_sel0, rd_sel1;  // 0=buf A, 1=buf B
@@ -410,15 +423,21 @@ module bmp_scale #(
 
     //---------------------------------------------------------------------
     // 源行装载：从 FIFO 取 W 个像素，写入 ld_row[0] 对应的行缓冲
+    //   行边界由源端行首标志（src_sop）锁定：
+    //     · 标志在 ld_x==0 处 → 正常开始新行
+    //     · 标志在 ld_x!=0 处 → 说明上一行源像素不足 W：补黑补齐后收行，
+    //       再从标志处开始下一行（误差只留在那一行，不会逐行累积）
+    //     · 没见过标志（老数据流）→ 退回纯计数模式，行为与原来完全一致
     //---------------------------------------------------------------------
     localparam LD_IDLE = 2'd0;
     localparam LD_RD   = 2'd1;
     localparam LD_WR   = 2'd2;
+    localparam LD_PAD  = 2'd3;
     reg [1:0] ld_state;
 
     // 写使能必须与当前 ld_x/fifo_dout 同拍；不能打一拍，
     // 否则地址已经 +1，会把像素写到错位地址。
-    assign ld_we = (ld_state == LD_WR);
+    assign ld_we = (ld_state == LD_WR) || (ld_state == LD_PAD);
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -430,6 +449,8 @@ module bmp_scale #(
             buf_ready_a<= 1'b0;
             buf_ready_b<= 1'b0;
             fifo_rd_en <= 1'b0;
+            sop_seen   <= 1'b0;
+            fill_row   <= 1'b0;
         end else if (src_config) begin
             ld_state   <= LD_IDLE;
             ld_row     <= 11'd0;
@@ -439,6 +460,8 @@ module bmp_scale #(
             buf_ready_a<= 1'b0;
             buf_ready_b<= 1'b0;
             fifo_rd_en <= 1'b0;
+            sop_seen   <= 1'b0;
+            fill_row   <= 1'b0;
         end else begin
             fifo_rd_en <= 1'b0;
 
@@ -451,12 +474,23 @@ module bmp_scale #(
                             else         buf_ready_a <= 1'b0;
                         end else if (!tgt_ready) begin
                             if (!fifo_empty) begin
-                                pad_row    <= 1'b0;
-                                fifo_rd_en <= 1'b1;
-                                ld_state   <= LD_RD;
+                                if (fifo_sop && (ld_x != 11'd0)) begin
+                                    // 源行在 ld_x 处提前结束：补黑补齐到 W
+                                    fill_row <= 1'b1;
+                                    ld_state <= LD_PAD;
+                                end else begin
+                                    if (fifo_sop) begin
+                                        sop_seen <= 1'b1;
+                                        fill_row <= 1'b0;
+                                    end
+                                    pad_row    <= 1'b0;
+                                    fifo_rd_en <= 1'b1;
+                                    ld_state   <= LD_RD;
+                                end
                             end else if (eof_seen) begin
                                 // 源已读完但还差行：补黑行，保证输出 640×480 一定走完
                                 pad_row  <= 1'b1;
+                                fill_row <= 1'b0;
                                 ld_state <= LD_RD;
                             end
                         end
@@ -482,6 +516,25 @@ module bmp_scale #(
                         end
                         ld_row <= ld_row + 1'b1;
                         ld_x   <= 11'd0;
+                    end else begin
+                        ld_x <= ld_x + 1'b1;
+                    end
+                end
+
+                LD_PAD: begin
+                    // 用黑像素补齐本行剩余位置（ld_we=1，地址 = ld_x）
+                    if (ld_x == W - 1) begin
+                        if (tgt_sel) begin
+                            buf_row_b   <= tgt_row;
+                            buf_ready_b <= 1'b1;
+                        end else begin
+                            buf_row_a   <= tgt_row;
+                            buf_ready_a <= 1'b1;
+                        end
+                        ld_row <= ld_row + 1'b1;
+                        ld_x   <= 11'd0;
+                        fill_row <= 1'b0;
+                        ld_state <= LD_IDLE;
                     end else begin
                         ld_x <= ld_x + 1'b1;
                     end
@@ -525,6 +578,7 @@ module bmp_scale #(
     reg signed [10:0] vdiff_r, vdiff_g, vdiff_b;
     reg signed [19:0] vprod_r, vprod_g, vprod_b;
     reg        fsm_valid;
+    reg        fsm_sop;
     reg [23:0] fsm_data;
     reg        fsm_done;
     reg        fsm_frame_done;
@@ -622,6 +676,7 @@ module bmp_scale #(
             vprod_g <= 20'sd0;
             vprod_b <= 20'sd0;
             fsm_valid <= 1'b0;
+            fsm_sop   <= 1'b0;
             fsm_data  <= 24'd0;
             fsm_done  <= 1'b0;
             fsm_frame_done <= 1'b0;
@@ -673,11 +728,13 @@ module bmp_scale #(
             vprod_g <= 20'sd0;
             vprod_b <= 20'sd0;
             fsm_valid <= 1'b0;
+            fsm_sop   <= 1'b0;
             fsm_data  <= 24'd0;
             fsm_done  <= 1'b0;
             fsm_frame_done <= 1'b0;
         end else if (!bypass && cfg_done) begin
             fsm_valid <= 1'b0;
+            fsm_sop   <= 1'b0;
             fsm_done  <= 1'b0;
 
             if (fsm_frame_done) begin
@@ -849,6 +906,7 @@ module bmp_scale #(
                                 fsm_data[7:0]   <= blerp_v_final(top_rgb[7:0],   vprod_b);
                             end
                             fsm_valid <= 1'b1;
+                            fsm_sop   <= (out_x == 10'd0);
                             if (!bar_pix) begin
                                 x_acc <= x_acc + x_step;
                                 if (cx_cnt != (DW - 16'd1))
@@ -889,11 +947,13 @@ module bmp_scale #(
     //---------------------------------------------------------------------
     assign out_valid = bypass ? byp_valid : fsm_valid;
     assign out_data  = bypass ? byp_data  : fsm_data;
+    assign out_sop   = bypass ? byp_sop   : fsm_sop;
     assign out_done  = bypass ? byp_done  : fsm_done;
 
     // FIFO 半满即反压，给一个扇区（最多 171 像素）的在途数据留余量
-    assign src_ready = bypass ? 1'b1 : (fifo_cnt < (1 << (FIFO_AW - 1)));
-    assign dbg_bypass = bypass;
+    // 加载器已收满 H 行（或走旁路）时不再反压：此时源端可能还剩少量像素，
+    // 若继续要求 FIFO 低位就会和加载器互相等待（预载卡死）。
+    assign src_ready = bypass ? 1'b1 : ((fifo_cnt < (1 << (FIFO_AW - 1))) || (ld_row >= H));
 
     // 未使用信号：保留端口便于调试/后续扩展
     // src_sop/src_eof 由 bmp_read 提供，本模块用 src_config 启动

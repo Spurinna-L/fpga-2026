@@ -78,11 +78,7 @@ module bmp_read(
     output wire [15:0]          bmp_src_width,
     output wire [15:0]          bmp_src_height,
     output reg                  bmp_src_sop,
-    output reg                  bmp_src_eof,
-
-    // 诊断：源行像素数是否等于 W
-    output wire [3:0]           dbg_bad_rows,
-    output wire [15:0]          dbg_last_x
+    output reg                  bmp_src_eof
 );
 
 localparam ST_IDLE      = 3'd0;
@@ -109,46 +105,18 @@ reg [31:0] bmp_len_cnt;
 reg [1:0]  bmp_byte_idx;
 
 reg [15:0] src_x, src_y;
-reg [15:0] dbg_last_x_r;  // 上一源行结束时的 src_x（正常应为 W-1）
-reg [3:0]  dbg_bad_rows_r;// 像素数不等于 W 的行数（饱和 15）
 reg [15:0] row_byte_cnt;
 reg        load_pause;
+
+// 当前字节在像素中的相位（0/1/2）。行首字节强制为 0：这样即使行末有
+// 数据空拍（真实 SPI 每 8 拍才来 1 字节）或该行有 4 字节填充，相位也不会错。
+wire [1:0] cur_phase = (row_byte_cnt == 16'd0) ? 2'd0 : bmp_byte_idx;
 
 // 行字节数/stride 在文件头解析后寄存，避免每字节都走 width*3+对齐的长组合路径
 reg  [16:0] row_pixel_bytes_r;
 reg  [16:0] row_stride_r;
 
 assign bmp_src_width  = width[15:0];
-assign dbg_bad_rows   = dbg_bad_rows_r;
-//--------------------------------------------------------------------------
-// 扇区字节对齐：每个扇区只认前 512 个 data_valid，多出来的（真实 SD 上
-// 会在扇区边界重复/多出一个字节）直接丢弃，保证“每 512 字节 = 一个扇区”
-// 严格成立，行/像素计数不会逐行漂移。
-//   sec_idx_r : 本扇区内已收字节序号 0..1023
-//   sd_byte_vld : 有效字节（丢弃 sec_idx>=512 的多余脉冲）
-//   extra_r   : 被丢弃的多余字节数（饱和 15）——诊断用
-//--------------------------------------------------------------------------
-reg [9:0] sec_idx_r;
-reg [3:0] extra_r;
-wire      sd_byte_vld = sd_sec_read_data_valid && (sec_idx_r < 10'd512);
-assign dbg_last_x = {extra_r, 4'h5, 8'hA5};
-
-always @(posedge clk or posedge rst) begin
-    if (rst) begin
-        sec_idx_r <= 10'd0;
-        extra_r   <= 4'd0;
-    end else begin
-        if (sd_sec_read_end)
-            sec_idx_r <= 10'd0;
-        else if (sd_sec_read_data_valid && (sec_idx_r != 10'd1023))
-            sec_idx_r <= sec_idx_r + 10'd1;
-
-        if (sd_sec_read_data_valid && (sec_idx_r >= 10'd512) && (extra_r != 4'hF))
-            extra_r <= extra_r + 4'd1;
-        if (state == ST_IDLE)
-            extra_r <= 4'd0;
-    end
-end
 assign bmp_src_height = height[15:0];
 
 wire header_match;
@@ -191,7 +159,7 @@ always @(posedge clk or posedge rst) begin
     else
         header_match_r <= header_match;
 end
-assign bmp_data_valid = (sd_byte_vld == 1'b1) &&
+assign bmp_data_valid = (sd_sec_read_data_valid == 1'b1) &&
                         (bmp_len_cnt >= pixel_offset) &&
                         (bmp_len_cnt <  file_len) &&
                         (src_y < height[15:0]) &&
@@ -213,7 +181,7 @@ always @(posedge clk or posedge rst) begin
     if (rst) begin
         rd_cnt <= 10'd0;
     end else if ((state == ST_SCAN) || (state == ST_LOAD_HDR)) begin
-        if (sd_byte_vld)
+        if (sd_sec_read_data_valid)
             rd_cnt <= rd_cnt + 10'd1;
         else if (sd_sec_read_end)
             rd_cnt <= 10'd0;
@@ -232,7 +200,7 @@ always @(posedge clk or posedge rst) begin
         height       <= 32'd0;
         bit_count    <= 16'd0;
         compression  <= 32'd0;
-    end else if (((state == ST_SCAN) || (state == ST_LOAD_HDR)) && sd_byte_vld) begin
+    end else if (((state == ST_SCAN) || (state == ST_LOAD_HDR)) && sd_sec_read_data_valid) begin
         case (rd_cnt)
             10'd0 : header_0 <= sd_sec_read_data;
             10'd1 : header_1 <= sd_sec_read_data;
@@ -273,7 +241,7 @@ always @(posedge clk or posedge rst) begin
     if (rst) begin
         bmp_len_cnt <= 32'd0;
     end else if (state == ST_LOAD_DATA) begin
-        if (sd_byte_vld)
+        if (sd_sec_read_data_valid)
             bmp_len_cnt <= bmp_len_cnt + 32'd1;
     end else begin
         bmp_len_cnt <= 32'd0;
@@ -285,27 +253,20 @@ always @(posedge clk or posedge rst) begin
         src_x        <= 16'd0;
         src_y        <= 16'd0;
         row_byte_cnt <= 16'd0;
-        dbg_last_x_r   <= 16'd0;
-        dbg_bad_rows_r <= 4'd0;
     end else if (state != ST_LOAD_DATA) begin
         src_x        <= 16'd0;
         src_y        <= 16'd0;
         row_byte_cnt <= 16'd0;
-    end else if (sd_byte_vld &&
+    end else if (sd_sec_read_data_valid &&
                  (bmp_len_cnt >= pixel_offset) &&
                  (src_y < height[15:0])) begin
         if (row_byte_cnt == row_stride_r[15:0] - 16'd1) begin
-            // 一源行结束：记录本行实际发出的像素数（应为 W-1，即 639）
-            dbg_last_x_r <= src_x;
-            if (src_x != ({1'b0, width[15:0]} - 16'd1))
-                if (dbg_bad_rows_r != 4'hF)
-                    dbg_bad_rows_r <= dbg_bad_rows_r + 4'd1;
             row_byte_cnt <= 16'd0;
             src_y        <= src_y + 16'd1;
             src_x        <= 16'd0;
         end else begin
             row_byte_cnt <= row_byte_cnt + 16'd1;
-            if (bmp_data_valid && (bmp_byte_idx == 2'd2))
+            if (bmp_data_valid && (cur_phase == 2'd2))
                 src_x <= src_x + 16'd1;
         end
     end
@@ -315,10 +276,12 @@ always @(posedge clk or posedge rst) begin
     if (rst) begin
         bmp_byte_idx <= 2'd0;
     end else if (state == ST_LOAD_DATA) begin
-        if (row_byte_cnt == row_stride_r[15:0] - 16'd1)
+        // 绝不能在行末字节之前清零相位（那会让该行最后一个像素丢失，
+        // 每行少 1 个像素 -> 逐行累积成斜切）。相位只跟随有效字节推进。
+        if (bmp_data_valid)
+            bmp_byte_idx <= (cur_phase == 2'd2) ? 2'd0 : (cur_phase + 2'd1);
+        else if (row_byte_cnt == 16'd0)
             bmp_byte_idx <= 2'd0;
-        else if (bmp_data_valid)
-            bmp_byte_idx <= (bmp_byte_idx == 2'd2) ? 2'd0 : (bmp_byte_idx + 2'd1);
     end else begin
         bmp_byte_idx <= 2'd0;
     end
@@ -332,7 +295,7 @@ always @(posedge clk or posedge rst) begin
     end else if (state == ST_LOAD_DATA) begin
         bmp_src_sop <= 1'b0;
         if (bmp_data_valid) begin
-            case (bmp_byte_idx)
+            case (cur_phase)
                 2'd0: begin
                     bmp_data_wr_en <= 1'b0;
                     bmp_data[7:0]  <= sd_sec_read_data;
@@ -344,7 +307,9 @@ always @(posedge clk or posedge rst) begin
                 2'd2: begin
                     bmp_data_wr_en  <= 1'b1;
                     bmp_data[23:16] <= sd_sec_read_data;
-                    if ((src_x == 16'd0) && (src_y == 16'd0))
+                    // 每个源行第一个像素给出行首标志：让缩放器/写通路以“真实行边界”
+                    // 对齐，而不是靠数像素推断。任何行内丢/多一个像素都不会累积成斜切。
+                    if (src_x == 16'd0)
                         bmp_src_sop <= 1'b1;
                 end
                 default: begin

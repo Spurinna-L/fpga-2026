@@ -216,73 +216,18 @@ module top(
     //-------------------------------------------------------------------------
     // SD / FAT32 / BMP / 双缓冲
     //-------------------------------------------------------------------------
-    wire        sd_display_valid;
+    wire        display_valid;
     wire [3:0]  state_code;
     wire [1:0]  write_buf_idx;
-    wire [1:0]  sd_disp_buf_idx;
-    wire [1:0]  sd_img_idx;
+    wire [1:0]  disp_buf_idx;
+    wire [1:0]  img_idx;
 
     wire        sd_write_req;
     wire        sd_write_req_ack;
     wire        sd_write_en;
     wire [31:0] sd_write_data;
 
-    //-------------------------------------------------------------------------
-    // DIAG_PAT：合成图案自检（0=正常，1=自检版）
-    //   1) 绕过 SD，直接把 640×480 图案写进槽 0（走同一条 frame_read_write 写通路）
-    //   2) 显示时把读回的像素与图案比对，数码管显示 [错误数][首错 x>>6][首错 y>>6]
-    //-------------------------------------------------------------------------
     wire        frame_write_finish;
-    localparam DIAG_PAT = 1'b0;
-
-    reg  [9:0]  dpat_xr;
-    reg  [8:0]  dpat_yr;
-    reg  [2:0]  dpat_st;
-    reg  [4:0]  dpat_dly;
-    reg         dpat_req, dpat_done;
-    wire        dpat_ack = sd_write_req_ack;
-    wire        dpat_fin = frame_write_finish;
-    wire        dpat_we  = (dpat_st == 3'd2);
-    wire [23:0] dpat_rgb = { dpat_xr[3] ? 8'hFF : 8'h00,
-                             dpat_yr[6] ? 8'hFF : 8'h00,
-                             (dpat_xr[5:4] == 2'd0) ? 8'hA0 : 8'h20 };
-    wire        dpat_last = (dpat_yr == 9'd479) && (dpat_xr == 10'd639);
-
-    always @(posedge sd_card_clk or posedge rst_sd) begin
-        if (rst_sd || !DIAG_PAT) begin
-            dpat_xr   <= 10'd0;
-            dpat_yr   <= 9'd0;
-            dpat_st   <= 3'd0;
-            dpat_dly  <= 5'd0;
-            dpat_req  <= 1'b0;
-            dpat_done <= 1'b0;
-        end else begin
-            case (dpat_st)
-                3'd0: begin dpat_req <= 1'b1; dpat_st <= 3'd1; end
-                3'd1: if (dpat_ack) begin dpat_req <= 1'b0; dpat_dly <= 5'd0; dpat_st <= 3'd5; end
-                3'd5: begin
-                    if (dpat_dly == 5'd15) dpat_st <= 3'd2;
-                    else                   dpat_dly <= dpat_dly + 5'd1;
-                end
-                3'd2: begin
-                    if (dpat_last) dpat_st <= 3'd3;
-                    if (dpat_xr == 10'd639) begin dpat_xr <= 10'd0; dpat_yr <= dpat_yr + 9'd1; end
-                    else                          dpat_xr <= dpat_xr + 10'd1;
-                end
-                3'd3: if (dpat_fin) begin dpat_done <= 1'b1; dpat_st <= 3'd4; end
-                default: ;
-            endcase
-        end
-    end
-
-    wire        display_valid = DIAG_PAT ? dpat_done : sd_display_valid;
-    wire [1:0]  disp_buf_idx  = DIAG_PAT ? 2'd0      : sd_disp_buf_idx;
-    wire [1:0]  img_idx       = DIAG_PAT ? 2'd0      : sd_img_idx;
-    wire        fb_write_req  = DIAG_PAT ? dpat_req  : sd_write_req;
-    wire        fb_write_en   = DIAG_PAT ? dpat_we   : sd_write_en;
-    wire [31:0] fb_write_data = DIAG_PAT ? {dpat_rgb, 8'h00} : sd_write_data;
-    wire [1:0]  fb_write_idx  = DIAG_PAT ? 2'd0      : write_buf_idx;
-
     reg         frame_write_toggle_mem;
 
     always @(posedge ext_mem_clk or posedge rst_mem) begin
@@ -291,13 +236,6 @@ module top(
         else if (frame_write_finish)
             frame_write_toggle_mem <= ~frame_write_toggle_mem;
     end
-
-    // 临时诊断总线（DEBUG_SEG=1 时显示在数码管上）
-    wire [3:0] dbg_found;
-    wire [3:0] dbg_def_t;
-    wire [3:0] dbg_def_o;
-    wire       dbg_scale_bypass;
-    wire [3:0] dbg_flags;
 
     sd_card_bmp #(
         .CLK_FREQ_HZ       (100_000_000),
@@ -312,16 +250,11 @@ module top(
         .state_code        (state_code),    // SD 卡状态码
         .bmp_width         (16'd1920),   // 源图最大宽（bmp_scale 适配到 640）
         .bmp_height         (16'd1080),  // 源图最大高
-        .display_valid     (sd_display_valid), // 首图已提交
+        .display_valid     (display_valid), // 首图已提交  
         .write_finish_toggle(frame_write_toggle_mem),
         .write_buf_idx     (write_buf_idx), // 当前写入缓冲区索引
-        .disp_buf_idx      (sd_disp_buf_idx),  // 当前显示缓冲区索引
-        .img_idx_o         (sd_img_idx),
-        .dbg_found         (dbg_found),
-        .dbg_def_t         (dbg_def_t),
-        .dbg_def_o         (dbg_def_o),
-        .dbg_scale_bypass  (dbg_scale_bypass),
-        .dbg_flags         (dbg_flags),
+        .disp_buf_idx      (disp_buf_idx),  // 当前显示缓冲区索引
+        .img_idx_o         (img_idx),
         .write_req         (sd_write_req),
         .write_req_ack     (sd_write_req_ack),
         .write_en          (sd_write_en),
@@ -594,17 +527,17 @@ module top(
         .App_wr_din       (App_wr_din),
         .App_wr_dm        (App_wr_dm),
         .write_clk        (sd_card_clk),
-        .write_req        (fb_write_req),
+        .write_req        (sd_write_req),
         .write_req_ack    (sd_write_req_ack),
         .write_finish     (frame_write_finish),
         .write_addr_0     (BUF0_ADDR),
         .write_addr_1     (BUF1_ADDR),
         .write_addr_2     (BUF2_ADDR),
         .write_addr_3     (BUF3_ADDR),
-        .write_addr_index (fb_write_idx),
+        .write_addr_index (write_buf_idx),
         .write_len        (FRAME_PIXELS),
-        .write_en         (fb_write_en),
-        .write_data       (fb_write_data)
+        .write_en         (sd_write_en),
+        .write_data       (sd_write_data)
     );
 
     //-------------------------------------------------------------------------
@@ -905,58 +838,12 @@ module top(
     );
 
     //-------------------------------------------------------------------------
-    // DIAG_PAT 读回自检：把显示读回的像素与"应该的图案"比对
-    //   数码管 = [错误数 8bit][首错 x>>6 4bit][首错 y>>6 4bit]
-    //-------------------------------------------------------------------------
-    reg [3:0]  chk_frm;
-    reg [9:0]  chk_err;
-    reg [9:0]  chk_fx, chk_fy;
-    reg        chk_lock;
-    wire [23:0] chk_exp = { post_x[3] ? 8'hFF : 8'h00,
-                            post_y[6] ? 8'hFF : 8'h00,
-                            (post_x[5:4] == 2'd0) ? 8'hA0 : 8'h20 };
-    always @(posedge video_clk or posedge rst_vid) begin
-        if (rst_vid) begin
-            chk_frm <= 4'd0; chk_err <= 10'd0; chk_fx <= 10'd0; chk_fy <= 10'd0; chk_lock <= 1'b0;
-        end else if (!display_valid) begin
-            chk_frm <= 4'd0; chk_err <= 10'd0; chk_fx <= 10'd0; chk_fy <= 10'd0; chk_lock <= 1'b0;
-        end else if (vs_fall) begin
-            if (chk_frm != 4'hF) chk_frm <= chk_frm + 4'd1;
-            if (chk_frm >= 4'd3) chk_lock <= 1'b1;
-        end else if (post_de && (chk_frm >= 4'd2) && !chk_lock) begin
-            if (mix_rgb != chk_exp) begin
-                if (chk_err != 10'h3FF) chk_err <= chk_err + 10'd1;
-                if (chk_err == 10'd0) begin chk_fx <= post_x; chk_fy <= post_y; end
-            end
-        end
-    end
-
-    reg [15:0] chk_d0, chk_d1;
-    always @(posedge clk or negedge rst_n_sys) begin
-        if (!rst_n_sys) begin
-            chk_d0 <= 16'd0;
-            chk_d1 <= 16'd0;
-        end else begin
-            chk_d0 <= {chk_err[7:0], chk_fx[9:6], chk_fy[9:6]};
-            chk_d1 <= chk_d0;
-        end
-    end
-
-    //-------------------------------------------------------------------------
     // 数码管 / LED
     //-------------------------------------------------------------------------
-    // DEBUG_SEG=1：数码管显示 [state][found][write_en/64K][flags]
-    //   flags = {display_valid, load_busy, source_done_seen, finish_seen}
-    localparam DEBUG_SEG = 1'b0;
-    wire [31:0] seg_value_final = DIAG_PAT
-        ? {16'h0000, chk_d1}
-        : (DEBUG_SEG ? {16'h0000, state_code, dbg_found, dbg_def_t, dbg_def_o}
-                     : regs_seg_value);
-
     seg_led u_seg (
         .clk     (clk),
         .rst_n   (rst_n_sys),
-        .value   (seg_value_final),
+        .value   (regs_seg_value),
         .dot     (4'b0000),
         .seg_sel (seg_sel),
         .seg_led (seg_led)

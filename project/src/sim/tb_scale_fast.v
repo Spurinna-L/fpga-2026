@@ -14,7 +14,7 @@ module tb_scale_fast;
 
   bmp_scale #(.DST_W(640), .DST_H(480), .MAX_SRC_W(1920), .MAX_SRC_H(1080)) dut (
     .clk(clk), .rst(rst),
-    .src_valid(src_valid), .src_data(src_data),
+    .src_valid(src_valid), .src_data(src_data), .src_sop(1'b0),
     .src_config(src_config), .src_width(src_w), .src_height(src_h),
     .out_valid(out_valid), .out_data(out_data), .out_done(out_done),
     .src_eof(1'b0),

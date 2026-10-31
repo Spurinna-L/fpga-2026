@@ -155,6 +155,7 @@ module tb_bmp_pipeline;
         .clk        (clk),
         .rst        (rst),
         .src_valid  (src_valid),
+    .src_sop    (src_sop),
         .src_data   (src_data),
         .src_config (src_config),
         .src_width  (src_width),

@@ -56,7 +56,8 @@ module tb_fb_write_layout;
         .write_addr_index(2'd0),
         .write_len       (PIX[20:0]),
         .fifo_aclr       (fifo_aclr),
-        .rdusedw         (rdusedw10)
+        .rdusedw         (rdusedw10),
+        .App_wr_sop      (1'b0)         // 本 TB 测无行首标志的兼容路径
     );
 
     integer errors = 0;

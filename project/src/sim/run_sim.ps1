@@ -77,8 +77,23 @@ Invoke-Tb 'tb_regs' @(
     "$h\control\regs.v"
 )
 
+# 帧写地址布局：传统计数法 + 行首标志显式对齐（含“某行多一字”扰动）
+Invoke-Tb 'tb_fb_write_layout' @(
+    "$here\tb_fb_layout.v",
+    "$h\SD\frame_fifo_write.v"
+)
+
+Invoke-Tb 'tb_fb_sop' @(
+    "$here\tb_fb_sop.v",
+    "$h\SD\frame_fifo_write.v"
+)
 Invoke-Tb 'tb_bmp_read' @(
     "$here\tb_bmp_read.v",
+    "$h\SD\bmp_read.v"
+)
+
+Invoke-Tb 'tb_bmp_read_pad0gap' @(
+    "$here\tb_bmp_read_pad0gap.v",
     "$h\SD\bmp_read.v"
 )
 
@@ -91,6 +106,14 @@ Invoke-Tb 'tb_bmp_scale' @(
 
 Invoke-Tb 'tb_pad' @(
     "$here\tb_pad.v",
+    "$here\base_stubs.v",
+    "$h\SD\bmp_scale.v",
+    "$h\video\line_buffer.v"
+)
+
+# 源行首标志行锁定：源行少像素时，后续行不得整体漂移（斜切根因回归）
+Invoke-Tb 'tb_scale_rowlock' @(
+    "$here\tb_scale_rowlock.v",
     "$here\base_stubs.v",
     "$h\SD\bmp_scale.v",
     "$h\video\line_buffer.v"

@@ -32,6 +32,7 @@ module tb_bmp_scale;
         .clk        (clk),
         .rst        (rst),
         .src_valid  (src_valid),
+ .src_sop    (1'b0),
         .src_data   (src_data),
         .src_config (src_config),
         .src_width  (src_width),
