@@ -2,15 +2,15 @@
 // scroll_text_overlay.v — 底部中文滚动字幕图层（M2 扩展⑤）
 //-----------------------------------------------------------------------------
 // 功能：
-//   在画面底部叠加一条白色字幕带，并把 16x16 中文点阵（红色字）从右向左循环滚动。
+//   在画面底部叠加 16x16 中文点阵（红色字，**背景透明**），从右向左循环滚动。
 //   本工程内置文本：「逐逻辑而行，赴创新之约」（11 个全角字符，见
 //   font_cn_16x16.v 的码表；改文本需重新运行生成器并同步 TEXT_N）。
 //
 // 叠加方式（逐像素二选一，零乘法、零 BRAM、零延迟）：
-//   字幕带内：背景 = 纯白 24'hFFFFFF（不透明白色底条）
 //   字形像素：红色 24'hFF0000（R=255,G=0,B=0）
-//   字幕带外 / de=0 / I_en=0：原像素逐位直通，对背景图和 A/B 转场零影响
-//   （配色由下方 BAND_RGB / TEXT_RGB 两个 localparam 决定，改一行即可换色）
+//   其余像素（字形外 / de=0 / I_en=0）：原像素逐位直通 → **背景完全透明**，
+//   对背景图、A/B 转场、OSD 全部无影响
+//   （字色由下方 TEXT_RGB 决定，改一行即可换色）
 //
 // 滚动规则：
 //   pos 表示「文本第 0 个像素」的屏幕 X 坐标（可以为负）。
@@ -79,8 +79,6 @@ module scroll_text_overlay #(
     localparam integer TEXT_W  = TEXT_N * GLYPH_W;   // 11*16 = 176
 
     localparam [9:0] Y0      = 10'd448;   // 文本顶部
-    localparam [9:0] BAND_Y0 = 10'd444;   // 字幕带顶部
-    localparam [9:0] BAND_H  = 10'd24;    // 字幕带高度
 
     // pos 的循环区间：640（完全在右侧） → -(TEXT_W+GAP)（完全滚出左侧）
     localparam signed [11:0] POS_START = 12'sd640;
@@ -147,19 +145,15 @@ module scroll_text_overlay #(
     );
 
     //-------------------------------------------------------------------------
-    // 像素叠加（白底红字；改 BAND_RGB / TEXT_RGB 即可换配色）
+    // 像素叠加（字幕带**透明**：只有字形像素着色，其余像素原样透出下层视频）
     //-------------------------------------------------------------------------
-    localparam [23:0] BAND_RGB = 24'hFFFFFF;   // 底条：纯白（不透明）
     localparam [23:0] TEXT_RGB = 24'hFF0000;   // 字形：红色 R=255,G=0,B=0
 
-    wire in_band = (I_y >= BAND_Y0) && (I_y < (BAND_Y0 + BAND_H));
-
-    wire hit_band = I_en && I_de && in_band;
-    wire hit_text = hit_band && in_text_row && in_strip && pix_on;
+    wire hit_text = I_en && I_de && in_text_row && in_strip && pix_on;
 
     assign O_de  = I_de;
     assign O_x   = I_x;
     assign O_y   = I_y;
-    assign O_rgb = hit_text ? TEXT_RGB : (hit_band ? BAND_RGB : I_rgb);
+    assign O_rgb = hit_text ? TEXT_RGB : I_rgb;
 
 endmodule
