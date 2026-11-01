@@ -46,14 +46,16 @@
 //   line_sched / frame_line_read                提前一行取 A/B
 //   line_buffer ×2 / mixer                      A/B 乒乓行缓冲与溶解/滑动
 //   disp_ctrl                                   当前槽/目标槽/转场进度
-//   video_post                                  参数锁存 + 亮度/对比度 + OSD + Logo
+//   video_post                                  参数锁存 + 亮度/对比度 + 音频可视化 + OSD + Logo
+//   audio_viz / wave_capture / spectrum_analyzer 波形 + 8 段频谱柱叠加（M3 扩展⑤）
 //   test_pattern_640x480                        无图/首行未就绪时的彩条回退
 //   frame_read_write                            帧缓存写侧（仅开机预载）
 //   sdr_refresh_sweep                           消隐期顺序扫描，保持闲置槽
 //   sdram                                       SDRAM 控制器（含加密核）
 //   video_rgb_to_axis_640x480                   RGB/DE/VS → AXIS
+//   synth_player                                双声部音乐合成器（M3 扩展⑤ L2 音源）
 //   hdmi_audio_tone_i2s_64fs / I2S_receiver / audio_arc_calculate
-//                                               测试音 → PCM → ACR
+//                                               测试音/合成器 → PCM → ACR
 //   hdmi_1_4b_transmitter_core_wrapper          HDMI 1.4b 加密核（黑盒）
 //   hdmi_phy_wrapper                            TMDS 并串转换
 //   regs / seg_led                              按键参数与数码管
@@ -628,7 +630,7 @@ module top(
     );
 
     //-------------------------------------------------------------------------
-    // 音频：内部音阶测试音 → I2S 解串 → PCM + ACR
+    // 音频：I2S 解串 → PCM + ACR（I2S 主机 u_tone 见下方"音频源"段）
     //-------------------------------------------------------------------------
     wire        audio_i2s_bclk;
     wire        audio_i2s_lrck;
@@ -639,17 +641,6 @@ module top(
     wire        acr_valid;
     wire [19:0] acr_cts;
     wire [19:0] acr_n;
-
-    hdmi_audio_tone_i2s_64fs #(
-        .PHASE_INC (32'd39370534),
-        .AMP       (24'sd2000000)
-    ) u_tone (
-        .I_mclk     (audio_mclk),
-        .I_rst      (rst_aud),
-        .O_i2s_BCLK (audio_i2s_bclk),
-        .O_i2s_LRCK (audio_i2s_lrck),
-        .O_i2s_DOUT (audio_i2s_dout)
-    );
 
     I2S_receiver u_i2s_rx (
         .I_clk              (video_clk),
@@ -756,6 +747,7 @@ module top(
     wire [1:0]  regs_audio_src;
     wire [1:0]  regs_viz_mode;
     wire [1:0]  regs_timbre;
+    wire [2:0]  regs_fx_mode;
     wire [7:0]  regs_time_mm;
     wire [7:0]  regs_time_ss;
     wire        regs_tick_1hz;
@@ -776,11 +768,60 @@ module top(
         .audio_src    (regs_audio_src),
         .viz_mode     (regs_viz_mode),
         .timbre       (regs_timbre),
+        .fx_mode      (regs_fx_mode),
         .time_mm      (regs_time_mm),
         .time_ss      (regs_time_ss),
         .tick_1hz     (regs_tick_1hz),
         .seg_value    (regs_seg_value),
         .key_press    ()
+    );
+
+    //-------------------------------------------------------------------------
+    // 音频源（M3 扩展⑤）：L1 内部音阶 / L2 双声部合成器
+    //   - audio_src[0] = 0 → L1：hdmi_audio_tone_i2s_64fs 内部方波音阶（M2 行为）
+    //   - audio_src[0] = 1 → L2：synth_player 并行样本，经同一个 I2S 主机发出
+    //   - timbre 只影响 L2 的谐波配比
+    //   audio_src / timbre 在 50MHz 按键域，这里用 2FF 同步到 audio_mclk 域。
+    //   timbre 是多位总线，但它只选"混音公式"，被采到中间值的后果只是某几个
+    //   样点的音色不同（听不出来），因此不需要总线级握手。
+    //-------------------------------------------------------------------------
+    reg [1:0]  aud_timbre_ff0, aud_timbre_ff1;
+    reg        aud_src_ff0,    aud_src_ff1;
+
+    always @(posedge audio_mclk or posedge rst_aud) begin
+        if (rst_aud) begin
+            aud_timbre_ff0 <= 2'd0;
+            aud_timbre_ff1 <= 2'd0;
+            aud_src_ff0    <= 1'b0;
+            aud_src_ff1    <= 1'b0;
+        end else begin
+            aud_timbre_ff0 <= regs_timbre;
+            aud_timbre_ff1 <= aud_timbre_ff0;
+            aud_src_ff0    <= regs_audio_src[0];
+            aud_src_ff1    <= aud_src_ff0;
+        end
+    end
+
+    wire signed [23:0] audio_synth_sample;
+
+    synth_player u_synth (
+        .I_clk    (audio_mclk),
+        .I_rst    (rst_aud),
+        .I_timbre (aud_timbre_ff1),
+        .O_sample (audio_synth_sample)
+    );
+
+    hdmi_audio_tone_i2s_64fs #(
+        .PHASE_INC (32'd39370534),
+        .AMP       (24'sd2000000)
+    ) u_tone (
+        .I_mclk       (audio_mclk),
+        .I_rst        (rst_aud),
+        .I_use_ext    (aud_src_ff1),
+        .I_ext_sample (audio_synth_sample),
+        .O_i2s_BCLK   (audio_i2s_bclk),
+        .O_i2s_LRCK   (audio_i2s_lrck),
+        .O_i2s_DOUT   (audio_i2s_dout)
     );
 
     //-------------------------------------------------------------------------
@@ -805,10 +846,11 @@ module top(
     // mixer 之后的视频后处理：亮度/对比度 + 参数 OSD + 左上角 Logo（M2 扩展④）
     //   参数在 50MHz 按键域，视频在 25MHz 像素域 → video_post 内部用
     //   video_param_latch 做「2FF + 连续稳定检测 + vs 帧边界整组锁存」，
-    //   再串 video_proc（2 拍）与 osd_composer / logo_overlay（均为组合，0 拍），
-    //   并把 hs/vs 同步延迟 2 拍。
-    //   开关：osd_en（K4）同时控制「右上角参数面板」和「左上角 Logo」，
-    //   两者共用 video_post 内部同一份已同步信号 prm_osd_en，同帧同时开关。
+    //   再串 video_fx（3 拍，风格化滤镜）、video_proc（2 拍）、audio_viz（1 拍）
+    //   与 osd_composer / logo_overlay（均为组合，0 拍），并把 hs/vs 同步延迟 6 拍。
+    //   开关：osd_en（K4）同时控制「右上角参数面板」「左上角 Logo」和「音频可视化
+    //   （波形 + 频谱）」，三者共用 video_post 内部同一份已同步信号 prm_osd_en /
+    //   prm_viz_mode，同帧同时开关。
     //   底部滚动字幕由 K13 → subtitle_en 独立开关（同样在帧边界同步）。
     //-------------------------------------------------------------------------
     video_post u_video_post (
@@ -829,6 +871,11 @@ module top(
         .img_idx    (img_idx),
         .trans_mode (regs_trans_mode),
         .audio_src  (regs_audio_src),
+        .audio_timbre(regs_timbre),
+        .viz_mode   (regs_viz_mode),
+        .fx_mode    (regs_fx_mode),
+        .audio_valid(audio_valid),
+        .audio_sample(audio_left_data),
         .rgb_out    (post_rgb),
         .hs_out     (post_hs_v),
         .vs_out     (post_vs_v),

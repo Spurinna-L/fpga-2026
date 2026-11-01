@@ -2,10 +2,13 @@
 // osd_composer.v — 右上角参数 OSD 叠加（扩展要求 ④「信息叠加」）
 //-----------------------------------------------------------------------------
 // 功能：
-//   在画面上叠加一个 2 行 × 20 列、8×16 点阵的字符面板，实时回显：
+//   在画面上叠加一个 3 行 × 20 列、8×16 点阵的字符面板，实时回显：
 //     第 1 行： TIME 00:00 IMG:1/4
 //     第 2 行： BRT:+00 CNT:128 TR:0
-//   其中 mm:ss 每秒跳变、IMG 随切图跳变、BRT/CNT/TR 随按键跳变。
+//     第 3 行： MDE:1 TMB:1 SRC:0 F1   （M3.3：末位 F0..F7 为滤镜模式）
+//   其中 mm:ss 每秒跳变、IMG 随切图跳变、BRT/CNT/TR/MDE/TMB/SRC/FX 随按键跳变。
+//   MDE 只有 0/1 两态：1=波形+频谱同开，0=全关，与 OSD 面板共用 K4 开关。
+//   F0=直通 F1=锐化 F2=线稿 F3=浮雕 F4=卡通 F5=灰度 F6=反色 F7=暖调。
 //
 // 叠加方式（零乘法、零 BRAM）：
 //   字形像素 = 纯白 0xFFFFFF ；
@@ -59,6 +62,10 @@ module osd_composer(
     input  wire [4:0]        I_ss_lo,
     input  wire [4:0]        I_img,
     input  wire [4:0]        I_tr,
+    input  wire [4:0]        I_fx,
+    input  wire [4:0]        I_viz_mode,
+    input  wire [4:0]        I_timbre,
+    input  wire [4:0]        I_audio_src,
 
     output wire              O_de,
     output wire [9:0]        O_x,
@@ -72,7 +79,7 @@ module osd_composer(
     localparam [9:0] X0     = 10'd472;
     localparam [9:0] Y0     = 10'd8;
     localparam [9:0] PANEL_W = 10'd160;   // 20 × 8
-    localparam [9:0] PANEL_H = 10'd34;    // 2 × 18
+    localparam [9:0] PANEL_H = 10'd52;    // 3 × 18 - 2（最后一行不留空地）
 
     // 字符码（与 font_ascii_8x16.v 码表一致）
     localparam [4:0] CH_SP    = 5'd14;
@@ -88,6 +95,9 @@ module osd_composer(
     localparam [4:0] CH_C     = 5'd21;
     localparam [4:0] CH_N     = 5'd22;
     localparam [4:0] CH_G     = 5'd23;
+    localparam [4:0] CH_D     = 5'd26;
+    localparam [4:0] CH_S     = 5'd27;
+    localparam [4:0] CH_F     = 5'd25;    // 滤镜模式前缀 'F'
 
     //-------------------------------------------------------------------------
     // 坐标 → 面板内位置
@@ -101,9 +111,13 @@ module osd_composer(
     wire [4:0] col   = dx[7:3];                 // 0..19（dx < 160）
     wire [2:0] sub_x = dx[2:0];                 // 字符内列 0..7
 
-    wire       line2 = (dy[4:0] >= 5'd18);      // 0 = 第 1 行，1 = 第 2 行
-    wire [4:0] row5  = line2 ? (dy[4:0] - 5'd18) : dy[4:0];
-    wire       in_row = (row5 < 5'd16);         // 行间的 2px 空隙不画字
+    wire       line1 = (dy < 10'd18);                       // 第 1 行
+    wire       line3 = (dy >= 10'd36);                      // 第 3 行
+    wire       line2 = !line1 && !line3;                    // 第 2 行
+    wire [9:0] row_d = line3 ? (dy - 10'd36) :
+                       line2 ? (dy - 10'd18) : dy;
+    wire [4:0] row5  = row_d[4:0];
+    wire       in_row = (row_d < 10'd16);                   // 行间的 2px 空隙不画字
 
     // 面板内有效像素（de=1 且落在面板矩形内）
     wire in_panel = I_de && in_x && in_y;
@@ -115,7 +129,7 @@ module osd_composer(
 
     always @(*) begin
         ch = CH_SP;
-        if (!line2) begin
+        if (line1) begin
             // 第 1 行：TIME 00:00 IMG:1/4
             case (col)
                 5'd0 : ch = CH_T;
@@ -138,7 +152,7 @@ module osd_composer(
                 5'd17: ch = CH_4;
                 default: ch = CH_SP;
             endcase
-        end else begin
+        end else if (line2) begin
             // 第 2 行：BRT:+00 CNT:128 TR:0
             case (col)
                 5'd0 : ch = CH_B;
@@ -161,6 +175,31 @@ module osd_composer(
                 5'd17: ch = CH_R;
                 5'd18: ch = CH_COLON;
                 5'd19: ch = I_tr;
+                default: ch = CH_SP;
+            endcase
+        end else begin
+            // 第 3 行：MDE:1 TMB:1 SRC:0 F1
+            case (col)
+                5'd0 : ch = CH_M;
+                5'd1 : ch = CH_D;
+                5'd2 : ch = CH_E;
+                5'd3 : ch = CH_COLON;
+                5'd4 : ch = I_viz_mode;
+                5'd5 : ch = CH_SP;
+                5'd6 : ch = CH_T;
+                5'd7 : ch = CH_M;
+                5'd8 : ch = CH_B;
+                5'd9 : ch = CH_COLON;
+                5'd10: ch = I_timbre;
+                5'd11: ch = CH_SP;
+                5'd12: ch = CH_S;
+                5'd13: ch = CH_R;
+                5'd14: ch = CH_C;
+                5'd15: ch = CH_COLON;
+                5'd16: ch = I_audio_src;
+                5'd17: ch = CH_SP;
+                5'd18: ch = CH_F;
+                5'd19: ch = I_fx;
                 default: ch = CH_SP;
             endcase
         end

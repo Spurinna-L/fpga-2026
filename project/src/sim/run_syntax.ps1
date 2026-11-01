@@ -1,4 +1,4 @@
-# iverilog syntax check (encrypted PLL/SDRAM replaced by sim/base_stubs.v)
+﻿# iverilog syntax check (encrypted PLL/SDRAM replaced by sim/base_stubs.v)
 $ErrorActionPreference = "Stop"
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -22,6 +22,7 @@ $files = @(
     "$h\audio\I2S_receiver.v",
     "$h\audio\audio_arc_calculate.v",
     "$h\audio\hdmi_audio_tone_i2s_64fs.v",
+    "$h\audio\synth_player.v",
     "$h\video\video_rgb_to_axis_640x480.v",
     "$h\video\test_pattern_640x480.v",
     "$h\video\video_delay2.v",
@@ -32,6 +33,7 @@ $files = @(
     "$h\video\disp_ctrl.v",
     "$h\video\mixer.v",
     "$h\video\video_post.v",
+    "$h\video\video_fx.v",
     "$h\video\video_proc.v",
     "$h\video\video_param_latch.v",
     "$h\video\osd_composer.v",
@@ -40,6 +42,9 @@ $files = @(
     "$h\video\logo_data_32x32.v",
     "$h\video\font_cn_16x16.v",
     "$h\video\scroll_text_overlay.v",
+    "$h\video\wave_capture.v",
+    "$h\video\spectrum_analyzer.v",
+    "$h\video\audio_viz.v",
     "$h\hdmi\hdmi_phy_warpper.v",
     "$h\hdmi\lane_lvds_10_1.v",
     "$h\SD\ax_debounce.v",

@@ -16,8 +16,10 @@ module tb_audio;
         .PHASE_INC (32'd39370534),
         .AMP       (24'sd2000000)
     ) u_tone (
-        .I_mclk     (mclk),
-        .I_rst      (rst),
+        .I_mclk       (mclk),
+        .I_rst        (rst),
+        .I_use_ext    (1'b0),          // 本 TB 只验证 L1 内部音阶
+        .I_ext_sample (24'sd0),
         .O_i2s_BCLK (bclk),
         .O_i2s_LRCK (lrck),
         .O_i2s_DOUT (dout)

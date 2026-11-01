@@ -19,6 +19,7 @@ module tb_regs;
     wire [1:0]  audio_src;
     wire [1:0]  viz_mode;
     wire [1:0]  timbre;
+    wire [2:0]  fx_mode;
     wire [7:0]  time_mm, time_ss;
     wire        tick_1hz;
     wire [31:0] seg_value;
@@ -41,6 +42,7 @@ module tb_regs;
         .audio_src    (audio_src),
         .viz_mode     (viz_mode),
         .timbre       (timbre),
+        .fx_mode      (fx_mode),
         .time_mm      (time_mm),
         .time_ss      (time_ss),
         .tick_1hz     (tick_1hz),
@@ -87,12 +89,16 @@ module tb_regs;
         check8({7'd0, subtitle_en}, 8'd1, "subtitle_en default");
         check8({6'd0, audio_src}, 8'd0, "audio_src default");
         check8({6'd0, viz_mode}, 8'd3,  "viz_mode default");
+        check8({5'd0, fx_mode},  8'd0,  "fx_mode default");
 
-        // 数码管：[SD状态=3][图片号=2][转场/OSD=1][音源/可视化=6]
+        // 数码管：[SD状态=3][图片号=2][转场/OSD=1][音源/可视化={audio_src[0],viz_mode[1],2'b00}]
         if (seg_value[15:12] !== 4'd3) begin $display("[TB] FAIL seg sd=%h", seg_value[15:12]); errs = errs + 1; end
         if (seg_value[11:8]  !== 4'd2) begin $display("[TB] FAIL seg img=%h", seg_value[11:8]); errs = errs + 1; end
         if (seg_value[7:4]   !== 4'h1) begin $display("[TB] FAIL seg mode=%h", seg_value[7:4]); errs = errs + 1; end
-        if (seg_value[3:0]   !== 4'h6) begin $display("[TB] FAIL seg aud=%h", seg_value[3:0]); errs = errs + 1; end
+        if (seg_value[3:0]   !== {audio_src[0], viz_mode[1], 2'b00}) begin
+            $display("[TB] FAIL seg aud=%h (exp %h)", seg_value[3:0], {audio_src[0], viz_mode[1], 2'b00});
+            errs = errs + 1;
+        end
 
         // 亮度 +/-8，饱和到 ±64
         press(4);  check8(brightness, 8'sd8,  "brightness +8");
@@ -111,7 +117,19 @@ module tb_regs;
         press(12); check8({7'd0, subtitle_en}, 8'd0, "subtitle off");
         press(12); check8({7'd0, subtitle_en}, 8'd1, "subtitle on");
         press(8);  check8({6'd0, audio_src}, 8'd1, "audio L2");
-        press(10); check8({6'd0, viz_mode}, 8'd0, "viz wrap 3->0");
+        // K11 已撤销（可视化改为跟随 K4 两态），按下后 viz_mode 仍应由 osd_en 派生
+        press(10); check8({6'd0, viz_mode}, {6'd0, {2{osd_en}}}, "viz follows osd");
+
+        // K14：风格化滤镜 8 模式循环
+        press(13); check8({5'd0, fx_mode}, 8'd1, "fx 1 sharpen");
+        press(13); check8({5'd0, fx_mode}, 8'd2, "fx 2 sketch");
+        repeat (5) press(13);
+        check8({5'd0, fx_mode}, 8'd7, "fx 7 warm");
+        press(13); check8({5'd0, fx_mode}, 8'd0, "fx wrap 7->0");
+
+        // 留一个非零 fx，验证一键复位能清掉
+        press(13); press(13); press(13);
+        check8({5'd0, fx_mode}, 8'd3, "fx 3 emboss");
 
         // 一键复位
         press(11);
@@ -121,6 +139,7 @@ module tb_regs;
         check8({7'd0, subtitle_en}, 8'd1, "reset subtitle");
         check8({6'd0, audio_src}, 8'd0, "reset audio");
         check8({6'd0, viz_mode}, 8'd3, "reset viz");
+        check8({5'd0, fx_mode},  8'd0, "reset fx");
 
         // 1Hz 时间戳（SEC_CYCLES=10）：相对增量校验（按键过程已走过多秒）
         ss0 = time_ss;

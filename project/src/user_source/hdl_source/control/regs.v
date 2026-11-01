@@ -3,7 +3,8 @@
 //-----------------------------------------------------------------------------
 // 功能：
 //   1) 对 key_deb 做上升沿检测，产生单拍 key_press[15:0]；
-//   2) 按键译码成亮度/对比度/转场/OSD/音源/可视化/音色等参数寄存器；
+//   2) 按键译码成亮度/对比度/转场/OSD/音源/音色等参数寄存器；
+//      音频可视化开关不单独设键，直接由 osd_en 派生（K4 一键同时开关）；
 //   3) 50MHz 分频出 1Hz tick，维护 MM:SS 时间戳；
 //   4) 把 SD 状态码、图片号、参数拼成 4 位数码管显示值；
 //   5) 把 100MHz 域的 state_code/img_idx 2FF 同步到 50MHz。
@@ -16,10 +17,12 @@
 //   in  img_idx[1:0]         当前图片序号（100MHz 域，2FF）
 //   in  disp_buf_idx[1:0]    当前显示缓冲
 //   out brightness/contrast  亮度（-64..+64）/ 对比度（64..192）
-//   out trans_mode/osd_en    转场模式 / OSD 开关
+//   out trans_mode           转场模式 0..2
+//   out osd_en               OSD 总开关（右上角参数面板 + 左上角 Logo + 音频可视化）
 //   out subtitle_en          底部滚动字幕开关（K13）
 //   out audio_src/timbre     音源 L1/L2、L2 音色
-//   out viz_mode             可视化模式 0..3
+//   out viz_mode             音频可视化开关，由 osd_en 派生：11=波形+频谱同开 / 00=全关
+//   out fx_mode[2:0]         实时风格化滤镜模式 0..7（K14 循环，0=直通）
 //   out time_mm/time_ss/tick_1hz  时间戳与 1Hz 脉冲
 //   out seg_value[31:0]      数码管显示值（4 位 × 4bit）
 //   out key_press[15:0]      单拍按下脉冲（当前顶层未消费，保留给后续模块）
@@ -29,12 +32,12 @@
 //
 // 按键分配（与《接口对接表》I7 一致）：
 //   [0] 下一张 / [1] 自动轮播（直接送 sd_card_bmp，本模块只旁路）
-//   [2] 转场模式  [3] OSD 开关  [4]/[5] 亮度 +/-8
-//   [6]/[7] 对比度 +/-16  [8] 音源  [9] 音色  [10] 可视化
-//   [11] 参数一键复位  [12] 底部滚动字幕开关  [13]~[15] 预留
+//   [2] 转场模式  [3] OSD 开关（面板 + Logo + 音频可视化，同一个键）
+//   [4]/[5] 亮度 +/-8  [6]/[7] 对比度 +/-16  [8] 音源  [9] 音色
+//   [11] 参数一键复位  [12] 底部滚动字幕开关  [13] 风格化滤镜循环  [10]/[14]/[15] 预留
 //
 // 数码管 4 位（高位在左）：
-//   [15:12] SD 状态码  [11:8] 图片序号  [7:4] 转场/OSD  [3:0] 音源/可视化
+//   [15:12] SD 状态码  [11:8] 图片序号  [7:4] 转场/OSD  [3:0] 音源/可视化(0/1)
 //
 // 内部例化：无
 //=============================================================================
@@ -59,8 +62,9 @@ module regs
     output reg         osd_en,
     output reg         subtitle_en,    // 底部滚动字幕开关（K13）
     output reg  [1:0]  audio_src,      // 0=L1 1=L2
-    output reg  [1:0]  viz_mode,       // 0=关 1=声波 2=频谱 3=声波+频谱
+    output wire [1:0]  viz_mode,       // 由 osd_en 派生：11=波形+频谱同开 00=全关
     output reg  [1:0]  timbre,
+    output reg  [2:0]  fx_mode,        // 风格化滤镜模式 0..7（0=直通）
 
     output reg  [7:0]  time_mm,        // 00..99
     output reg  [7:0]  time_ss,        // 00..59
@@ -126,8 +130,8 @@ module regs
             osd_en     <= 1'b1;
             subtitle_en <= 1'b1;
             audio_src  <= 2'd0;
-            viz_mode   <= 2'd3;
             timbre     <= 2'd0;
+            fx_mode    <= 3'd0;
         end else begin
             if (key_press[11]) begin
                 brightness <= 8'sd0;
@@ -136,8 +140,8 @@ module regs
                 osd_en     <= 1'b1;
                 subtitle_en <= 1'b1;
                 audio_src  <= 2'd0;
-                viz_mode   <= 2'd3;
                 timbre     <= 2'd0;
+                fx_mode    <= 3'd0;
             end else begin
                 if (key_press[2])
                     trans_mode <= (trans_mode == 2'd2) ? 2'd0 : (trans_mode + 2'd1);
@@ -157,11 +161,17 @@ module regs
                     audio_src <= (audio_src == 2'd0) ? 2'd1 : 2'd0;
                 if (key_press[9])
                     timbre <= (timbre == 2'd2) ? 2'd0 : (timbre + 2'd1);
-                if (key_press[10])
-                    viz_mode <= viz_mode + 2'd1;
+                if (key_press[13])
+                    fx_mode <= (fx_mode == 3'd7) ? 3'd0 : (fx_mode + 3'd1);
             end
         end
     end
+
+    //-------------------------------------------------------------------------
+    // 音频可视化开关：与 OSD 总开关（参数面板 + Logo）共用同一个按键（K4）
+    //   两态：2'b11 = 波形与频谱同时开；2'b00 = 全关（audio_viz 严格直通）
+    //-------------------------------------------------------------------------
+    assign viz_mode = {2{osd_en}};
 
     //-------------------------------------------------------------------------
     // 100MHz 慢变量 -> 50MHz（2FF）
@@ -191,7 +201,7 @@ module regs
         state_s1,                       // [15:12] SD 状态
         2'b00, img_s1,                  // [11:8]  图片序号
         1'b0, trans_mode, osd_en,       // [7:4]   转场 / OSD
-        audio_src[0], viz_mode, 1'b0    // [3:0]   音源 / 可视化
+        audio_src[0], viz_mode[1], 2'b00 // [3:0]   音源 / 可视化(0/1)
     };
 
 endmodule

@@ -352,7 +352,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="49"/>
+                    <Attr Name="CompileOrder" Val="50"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/frame_line_read.v">
@@ -360,7 +360,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="51"/>
+                    <Attr Name="CompileOrder" Val="52"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/line_buffer.v">
@@ -368,7 +368,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="53"/>
+                    <Attr Name="CompileOrder" Val="54"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/line_sched.v">
@@ -376,7 +376,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="55"/>
+                    <Attr Name="CompileOrder" Val="56"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/mixer.v">
@@ -384,7 +384,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="57"/>
+                    <Attr Name="CompileOrder" Val="58"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/video_delay2.v">
@@ -392,7 +392,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="59"/>
+                    <Attr Name="CompileOrder" Val="60"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/video_pos.v">
@@ -400,7 +400,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="61"/>
+                    <Attr Name="CompileOrder" Val="62"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/video_post.v">
@@ -408,7 +408,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="63"/>
+                    <Attr Name="CompileOrder" Val="64"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/font_ascii_8x16.v">
@@ -427,12 +427,20 @@
                     <Attr Name="CompileOrder" Val="48"/>
                 </FileInfo>
             </File>
+            <File Path="../user_source/hdl_source/video/video_fx.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="49"/>
+                </FileInfo>
+            </File>
             <File Path="../user_source/hdl_source/video/video_param_latch.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="50"/>
+                    <Attr Name="CompileOrder" Val="51"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/osd_composer.v">
@@ -440,7 +448,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="52"/>
+                    <Attr Name="CompileOrder" Val="53"/>
                 </FileInfo>
             </File>
             <File Path="../sim/base_stubs.v">
@@ -449,7 +457,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="54"/>
+                    <Attr Name="CompileOrder" Val="55"/>
                 </FileInfo>
             </File>
             <File Path="../sim/sdram_bhv.v">
@@ -458,7 +466,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="56"/>
+                    <Attr Name="CompileOrder" Val="57"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_audio.v">
@@ -467,7 +475,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="58"/>
+                    <Attr Name="CompileOrder" Val="59"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_fb_dual.v">
@@ -476,7 +484,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="60"/>
+                    <Attr Name="CompileOrder" Val="61"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_osd.v">
@@ -485,7 +493,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="62"/>
+                    <Attr Name="CompileOrder" Val="63"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_param_latch.v">
@@ -494,7 +502,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="64"/>
+                    <Attr Name="CompileOrder" Val="65"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_regs.v">
@@ -503,7 +511,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="65"/>
+                    <Attr Name="CompileOrder" Val="66"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_selftest.v">
@@ -512,7 +520,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="66"/>
+                    <Attr Name="CompileOrder" Val="67"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_timing.v">
@@ -521,7 +529,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="67"/>
+                    <Attr Name="CompileOrder" Val="68"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_video_proc.v">
@@ -530,7 +538,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="68"/>
+                    <Attr Name="CompileOrder" Val="69"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/logo_data_32x32.v">
@@ -538,7 +546,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="69"/>
+                    <Attr Name="CompileOrder" Val="70"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/logo_overlay.v">
@@ -546,7 +554,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="70"/>
+                    <Attr Name="CompileOrder" Val="71"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_chain.v">
@@ -555,7 +563,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="71"/>
+                    <Attr Name="CompileOrder" Val="72"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_disp_ctrl.v">
@@ -564,7 +572,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="72"/>
+                    <Attr Name="CompileOrder" Val="73"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_line_buffer.v">
@@ -573,7 +581,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="73"/>
+                    <Attr Name="CompileOrder" Val="74"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_line_read.v">
@@ -582,7 +590,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="74"/>
+                    <Attr Name="CompileOrder" Val="75"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_line_sched.v">
@@ -591,7 +599,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="75"/>
+                    <Attr Name="CompileOrder" Val="76"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_logo_overlay.v">
@@ -600,7 +608,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="76"/>
+                    <Attr Name="CompileOrder" Val="77"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_mixer.v">
@@ -609,7 +617,7 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="77"/>
+                    <Attr Name="CompileOrder" Val="78"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/font_cn_16x16.v">
@@ -617,7 +625,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="78"/>
+                    <Attr Name="CompileOrder" Val="79"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/video/scroll_text_overlay.v">
@@ -625,7 +633,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="79"/>
+                    <Attr Name="CompileOrder" Val="80"/>
                 </FileInfo>
             </File>
             <File Path="../sim/tb_scroll_text.v">
@@ -634,7 +642,57 @@
                     <Attr Name="UsedInSyn" Val="false"/>
                     <Attr Name="UsedInP&R" Val="false"/>
                     <Attr Name="BelongTo" Val="design_1"/>
-                    <Attr Name="CompileOrder" Val="80"/>
+                    <Attr Name="CompileOrder" Val="81"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/audio/synth_player.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="82"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/wave_capture.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="83"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/spectrum_analyzer.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="84"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/video/audio_viz.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="85"/>
+                </FileInfo>
+            </File>
+            <File Path="../sim/tb_video_post.v">
+                <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="86"/>
+                </FileInfo>
+            </File>
+            <File Path="../sim/tb_filter.v">
+                <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="87"/>
                 </FileInfo>
             </File>
             <File Path="../user_source/hdl_source/SD/bmp_scale.v">

@@ -23,6 +23,8 @@ log/
 *.ghw
 transcript
 work/
+# ModelSim 编译库/中间产物
+**/sim/msim/
 hdmi_test/sim/*.out
 hdmi_test/sim/*.bmp
 **/sim/*.out

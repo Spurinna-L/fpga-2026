@@ -35,14 +35,14 @@ project/src/
 │   │   ├── SD/                    # SD/BMP + bmp_scale + frame_read_write + sdr_refresh_sweep + sdram（含未综合的双读实验源码）
 │   │   ├── include/               # global_def.v + sdr_as_ram / sdr_init_ref / sdr_wrrd 加密核（位置固定）
 │   │   ├── video/                 # 行读取/行缓冲/mixer/video_post/video_proc/OSD/Logo
-│   │   ├── audio/                 # L1 测试音 / I2S_receiver / ACR（M3 余项增 synth_player/audio_viz）
+│   │   ├── audio/                 # L1 测试音 / L2 synth_player / I2S_receiver / ACR
 │   │   ├── hdmi/                  # HDMI 1.4b 加密核（黑盒）+ PHY + 10:1 串行化
 │   │   ├── control/               # keyboard_scan / key_filter / regs / seg_led* / reset_sync
 │   │   └── ip/                    # sys_pll / video_pll / afifo（TD IP）
 │   └── constraints_source/
 │       ├── pin.adc                # 本板引脚
 │       └── timing.sdc             # 时钟约束
-├── sim/                           # iverilog 语法检查 + 全部 M0–M3 testbench（22 个，fail-fast）
+├── sim/                           # iverilog 语法检查 + 全部 M0–M3.3 testbench（27 项，fail-fast）
 └── tools/                         # BMP 生成/检查 + 输出图
 ```
 
@@ -95,8 +95,9 @@ project/src/
 - 4×4 矩阵：`kb_row=D9/F9/C10/E10`，`kb_col=E11/D11/C11/F10`
 - `key_deb[0]`（第 4 行第 1 列）= **下一张**：只切换显示槽（瞬间完成，不加载）
 - `key_deb[1]`（第 4 行第 2 列）= **自动轮播开关**（同样只切换槽）
-- 其余按键：K3 转场模式、K4 OSD/Logo 开关、K5/K6 亮度 ±8、K7/K8 对比度 ±16、K12 参数复位、K13 滚动字幕开关（K9–K11 预留给音频/可视化）
-- 数码管（4 位，高位在左）：`[SD状态码][图片序号][转场/OSD][音源/可视化]`
+- 其余按键：K3 转场模式、K4 一键开关【参数黑条 + Logo + 右侧波形/频谱】、K5/K6 亮度 ±8、K7/K8 对比度 ±16、
+  K9 音源（L1/L2）、K10 音色（L2）、K12 参数复位、K13 滚动字幕开关、K14 风格化滤镜循环（K11 预留）；
+- 数码管（4 位，高位在左）：`[SD状态码][图片序号][转场/OSD][音源/可视化(0/1)]`
 - LED：
   - `led[0]` 音频 PLL 锁定
   - `led[1]` SDRAM 初始化完成
@@ -132,7 +133,7 @@ project/src/
 | 切图 | key1 **瞬间**切换到下一槽（无加载、无彩条） |
 | 轮播 | key2 开启后 4s 切换（只改槽号） |
 | 参数 OSD | 右上角两行：TIME/IMG/BRT/CNT/TR；K4 开关 |
-| 滚动字幕 | 底部白底红字 11 字循环；K13 开关 |
+| 滚动字幕 | 底部红字（背景透明）11 字循环；K13 开关 |
 | Logo | 左上角 32×32，与 OSD 同步开关 |
 | 数码管 | `[SD状态][图片号][转场/OSD][音源/可视化]` |
 
@@ -258,7 +259,7 @@ SDRAM → frame_line_read（每行 640 A + 640 B，计满 1280 个返回）
 
 ### 6.8 M2 底部中文滚动字幕（✅ 已上板）
 
-- `scroll_text_overlay`：底部 `y=444..467` 白底横幅，16×16 红字位于 `y=448..463`；纯组合，0 拍；
+- `scroll_text_overlay`：16×16 红字位于 `y=448..463`，**背景透明**（只画字形像素）；纯组合，0 拍；
 - 文案：`逐逻辑而行，赴创新之约` 共 **11 字**（`gen_cn_font_v.py` 生成，支持 1~16 字）；
 - `font_cn_16x16`：11×16×16 = 2,816 bit，组合 LUT ROM，**0 BRAM**；
 - 滚动：vs 下降沿 `pos-1`（1px/帧 ≈ 59.5px/s），整条 880px 循环约 14.8s；关闭时冻结；
@@ -326,6 +327,5 @@ powershell -ExecutionPolicy Bypass -File sim/run_sim.ps1
 
 - **M1（已完成并封档，tag `m1-final`；噪点修复 tag `m1-patch`）**：**4 槽预载 + 运行期只读**；顶层只例化 `frame_read_write`（1 写 1 读）；双读源码保留但不参与综合；`video_delay` 双 RGB + `x/y`；`control/regs` 16 键/1Hz/数码管；`sdr_refresh_sweep` 消隐期顺序扫描 4 槽；
 - **M2（✅ 已上板）**：`frame_line_read` + 2-bank 行缓冲 + `mixer`（溶解/滑动）+ `disp_ctrl` + `video_post`（亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕）；
-- **M3（图片缩放 ✅ 已上板）**：`bmp_read` 任意尺寸/行填充 + `bmp_scale` 双线性/黑边/旁路 + 补黑容错；
-  **M3 余项（下一步）**：L2 多谐波/双音伴奏波表合成 `synth_player` + `audio_viz`（声波曲线 + 8 段频谱）；
-- **M4**：`timing.sdc` 最终复测（补 `audio_mclk ↔ clk` 异步组）、QSPI 固化、2h 烤机（复位同步/写 FSM 打拍已在 M1 完成）。
+- **M3（✅ 已上板 + 已合并）**：图片缩放（`bmp_read`/`bmp_scale` + `src_sop` 行锁定 + 斜切根治 + 补黑兜底）、L2 `synth_player`（K9/K10）、`audio_viz`（右侧竖带声波+8 段频谱，随 K4）、`video_fx`（K14 八模式滤镜）、字幕透明背景；
+- **M4**：QSPI 固化、2h 烤机、演示视频/报告（`timing.sdc` 的 `audio_mclk ↔ clk` 异步组已在 M3 合并时补齐）。
