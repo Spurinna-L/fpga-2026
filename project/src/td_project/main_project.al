@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Project Version="3" Minor="2" Path="E:/FPGAproject/1/project/src/td_project">
+<Project Version="3" Minor="2" Path="D:/fpga_2026/project/src/td_project">
     <Project_Created_Time></Project_Created_Time>
     <TD_Version>6.2.178840</TD_Version>
     <Name>main_project</Name>

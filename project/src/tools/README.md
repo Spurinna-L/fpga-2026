@@ -28,7 +28,9 @@ python check_bmp.py output_bmp
 # 3) 打包成 64MB 原始镜像
 python sd_pack.py output_bmp\00_bars.bmp output_bmp\01_gradient.bmp `
                   output_bmp\02_checker.bmp output_bmp\03_text.bmp `
-                  -o output_sd\sd_card.img --sha256
+                  -o output_sd\sd_card.img --sha256  
+
+python sd_pack.py output_bmp -o output_sd\sd_card.img
 
 # 4) 模拟 RTL 扫描，确认镜像能被识别
 python sd_verify.py output_sd\sd_card.img --expect 4
