@@ -78,7 +78,7 @@ project/
 │   │   └── constraints_source/
 │   │       ├── pin.adc              # 引脚约束
 │   │       └── timing.sdc           # 时序约束
-│   ├── sim/                         # iverilog 语法检查 + M0–M3.3 testbench（27 项，fail-fast）
+│   ├── sim/                         # iverilog 语法检查 + M0–M3.3 testbench（27 个，默认跑 26，fail-fast）
 │   └── tools/                       # BMP 生成/检查 + output_bmp/
 ├── doc/                             # 设计文档 + SVG 框图
 ├── out/                             # bit 与综合/时序报告

@@ -42,7 +42,7 @@ project/src/
 │   └── constraints_source/
 │       ├── pin.adc                # 本板引脚
 │       └── timing.sdc             # 时钟约束
-├── sim/                           # iverilog 语法检查 + 全部 M0–M3.3 testbench（27 项，fail-fast）
+├── sim/                           # iverilog 语法检查 + 全部 M0–M3.3 testbench（27 个，默认跑 26，fail-fast）
 └── tools/                         # BMP 生成/检查 + 输出图
 ```
 
