@@ -12,7 +12,7 @@
 // 接口：
 //   in  key_next / key_auto        下一张 / 自动轮播（低有效）
 //   in  write_finish_toggle        125MHz 域“整帧写完”翻转标志
-//   in  bmp_width / bmp_height     期望分辨率（640/480）
+//   in  bmp_width / bmp_height     源图允许的最大宽/高（缩放版 1920/1080）
 //   out write_buf_idx[1:0]         当前写入缓冲
 //   out disp_buf_idx[1:0]          当前显示缓冲
 //   out img_idx_o[1:0]             当前图片序号（给 regs/OSD）
@@ -29,7 +29,8 @@
 //
 // 内部例化：
 //   key_press_debounce ×2（本文件底部定义的 20ms 消抖模块）
-//   bmp_read          BMP 定位与像素搬运
+//   bmp_read          BMP 定位、行填充跳过与源像素搬运
+//   bmp_scale         双线性缩放 + 保持比例黑边（640×480 旁路）
 //   sd_card_top       SD 卡子系统
 //
 // 备注：
@@ -49,8 +50,8 @@ module sd_card_bmp #(
     input                       key_next,
     input                       key_auto,
     output [3:0]                state_code,
-    input  [15:0]               bmp_width,   // BMP 图片宽度640
-    input  [15:0]               bmp_height,  // BMP 图片高度480
+    input  [15:0]               bmp_width,   // 允许的最大源宽（缩放版 1920）
+    input  [15:0]               bmp_height,  // 允许的最大源高（缩放版 1080）
     output reg                  display_valid,  // 首图已提交
 
     input                       write_finish_toggle,
@@ -76,8 +77,18 @@ wire [31:0]      sd_sec_read_addr;
 wire [7:0]       sd_sec_read_data;
 wire             sd_sec_read_data_valid;
 wire             sd_sec_read_end;
-wire             bmp_data_wr_en;
-wire [23:0]      bmp_data;
+wire             bmp_src_valid;
+wire [23:0]      bmp_src_data;
+wire             bmp_src_config;
+wire [15:0]      bmp_src_width;
+wire [15:0]      bmp_src_height;
+wire             bmp_src_sop;
+wire             bmp_src_eof;
+wire             scale_src_ready;
+wire             scale_out_valid;
+wire [23:0]      scale_out_data;
+wire             scale_out_sop;      // 行首标志（随像素一起穿过写 FIFO）
+wire             scale_done;
 wire             sd_init_done;
 wire             bmp_ready;
 wire             scan_done;
@@ -111,8 +122,10 @@ wire             write_finish_pulse;
 
 wire auto_tick;
 
-assign write_en   = bmp_data_wr_en;
-assign write_data = {bmp_data[23:16], bmp_data[15:8], bmp_data[7:0], 8'b0};
+assign write_en   = scale_out_valid;
+// bit0 = 行首标志：随像素一起穿过写 FIFO，帧写入侧据此显式对齐每行，
+// 不再依赖“每行恰好 640 个字”的隐式假设（行内丢/多一个像素也不会累积成斜切）。
+assign write_data = {scale_out_data[23:16], scale_out_data[15:8], scale_out_data[7:0], 7'b0, scale_out_sop};
 assign img_idx_o  = img_idx;
 assign auto_tick  = (auto_cnt == (CLK_FREQ_HZ * AUTO_PERIOD_S - 1));
 assign write_finish_pulse = wrfin_tgl_sync[2] ^ wrfin_tgl_sync[1];
@@ -226,7 +239,7 @@ always @(posedge clk or posedge rst) begin
             end
 
             // 记住 bmp_read 已经把源图送完 FIFO，但还不能切显示，得等整帧写完
-            if (load_busy && bmp_ready)
+            if (load_busy && (bmp_ready || scale_done))
                 source_done_seen <= 1'b1;
 
             // 整帧写完：该槽有效；还有图就继续加载下一槽，全部完成才开显示
@@ -330,8 +343,36 @@ bmp_read bmp_read_m0(
     .sd_sec_read_data       (sd_sec_read_data),
     .sd_sec_read_data_valid (sd_sec_read_data_valid),
     .sd_sec_read_end        (sd_sec_read_end),
-    .bmp_data_wr_en         (bmp_data_wr_en),
-    .bmp_data               (bmp_data)
+    .bmp_data_wr_en         (bmp_src_valid),
+    .bmp_data               (bmp_src_data),
+    .src_ready              (scale_src_ready),
+    .bmp_src_config         (bmp_src_config),
+    .bmp_src_width          (bmp_src_width),
+    .bmp_src_height         (bmp_src_height),
+    .bmp_src_sop            (bmp_src_sop),
+    .bmp_src_eof            (bmp_src_eof)
+);
+
+bmp_scale #(
+    .DST_W       (640),
+    .DST_H       (480),
+    .MAX_SRC_W   (1920),
+    .MAX_SRC_H   (1080)
+) u_bmp_scale (
+    .clk        (clk),
+    .rst        (rst),
+    .src_valid  (bmp_src_valid),
+    .src_sop    (bmp_src_sop),
+    .src_data   (bmp_src_data),
+    .src_config (bmp_src_config),
+    .src_width  (bmp_src_width),
+    .src_height (bmp_src_height),
+    .out_valid  (scale_out_valid),
+    .out_data   (scale_out_data),
+    .out_sop    (scale_out_sop),
+    .out_done   (scale_done),
+    .src_ready  (scale_src_ready),
+    .src_eof    (bmp_src_eof)
 );
 
 sd_card_top sd_card_top_m0(

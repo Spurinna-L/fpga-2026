@@ -1,39 +1,38 @@
 //=============================================================================
-// frame_fifo_write.v — 帧缓存写通道突发 FSM
+// frame_fifo_write.v 鈥?甯х紦瀛樺啓閫氶亾绐佸彂 FSM
 //-----------------------------------------------------------------------------
-// 功能：
-//   收到 write_req 后：清空写 FIFO、锁存基地址与帧长度 → 在 S_CHECK_FIFO
-//   判断 FIFO 水位是否够一次突发（且读通道不忙）→ 连续发 BURST_SIZE 个
-//   App_wr_en/App_wr_addr 把数据写进 SDRAM → 累计写满 write_len 后给
-//   write_finish 一拍。
+// 鍔熻兘锛?
+//   鏀跺埌 write_req 鍚庯細娓呯┖鍐?FIFO銆侀攣瀛樺熀鍦板潃涓庡抚闀垮害 鈫?鍦?S_CHECK_FIFO
+//   鍒ゆ柇 FIFO 姘翠綅鏄惁澶熶竴娆＄獊鍙戯紙涓旇閫氶亾涓嶅繖锛夆啋 杩炵画鍙?BURST_SIZE 涓?
+//   App_wr_en/App_wr_addr 鎶婃暟鎹啓杩?SDRAM 鈫?绱鍐欐弧 write_len 鍚庣粰
+//   write_finish 涓€鎷嶃€?
 //
-// 时钟/复位：mem_clk = 125MHz；rst 高有效。
+// 鏃堕挓/澶嶄綅锛歮em_clk = 125MHz锛況st 楂樻湁鏁堛€?
 //
-// 接口：
+// 鎺ュ彛锛?
 //   write_req / write_req_ack / write_finish
 //   write_addr_0..3[20:0] / write_addr_index[1:0] / write_len[20:0]
-//   rdusedw[9:0]     写 FIFO 中已有字数（读侧视角的水位）
-//   fifo_aclr        清空写 FIFO
+//   rdusedw[9:0]     鍐?FIFO 涓凡鏈夊瓧鏁帮紙璇讳晶瑙嗚鐨勬按浣嶏級
+//   fifo_aclr        娓呯┖鍐?FIFO
 //   App_wr_en / App_wr_addr[20:0]
-//   App_rd_busy      读通道忙，避免读写同时抢总线
-//   O_wr_busy        本通道正在/即将突发（给读通道让路）
+//   App_rd_busy      璇婚€氶亾蹇欙紝閬垮厤璇诲啓鍚屾椂鎶㈡€荤嚎
+//   O_wr_busy        鏈€氶亾姝ｅ湪/鍗冲皢绐佸彂锛堢粰璇婚€氶亾璁╄矾锛?
 //
-// 参数：
-//   MEM_DATA_BITS=32、ADDR_BITS=21、BURST_BITS=9、BURST_SIZE=128
-//   WRITE_V_FLIP=1、FRAME_WIDTH=640、FRAME_HEIGHT=480
-//   （本工程由 frame_read_write 传入 BURST_SIZE=256）
-//
-// 常量：
+// 鍙傛暟锛?
+//   MEM_DATA_BITS=32銆丄DDR_BITS=21銆丅URST_BITS=9銆丅URST_SIZE=128
+//   WRITE_V_FLIP=1銆丗RAME_WIDTH=640銆丗RAME_HEIGHT=480
+//   锛堟湰宸ョ▼鐢?frame_read_write 浼犲叆 BURST_SIZE=256锛?
+// 甯搁噺锛?
 //   S_IDLE / S_ACK / S_CHECK_FIFO / S_WRITE_BURST / S_WRITE_BURST_END / S_END
 //   VFLIP_FIRST_ADDR_OFFSET = (480-1)*640 = 306560
 //   VFLIP_LINE_JUMP         = 640*2-1   = 1279
 //
-// 内部例化：无
+// 鍐呴儴渚嬪寲锛氭棤
 //
-// 备注（M1 重点）：
-//   rdusedw_r / app_rd_busy_r / into_burst 各打一拍，是为切断 125MHz 下
-//   “FIFO 读指针 → 21bit 比较 → 读 FSM” 的长组合路径（原 -0.698ns 违例）。
-//   这三拍直接决定“何时允许启动写突发”，排查横带时优先怀疑这里。
+// 澶囨敞锛圡1 閲嶇偣锛夛細
+//   rdusedw_r / app_rd_busy_r / into_burst 鍚勬墦涓€鎷嶏紝鏄负鍒囨柇 125MHz 涓?
+//   鈥淔IFO 璇绘寚閽?鈫?21bit 姣旇緝 鈫?璇?FSM鈥?鐨勯暱缁勫悎璺緞锛堝師 -0.698ns 杩濅緥锛夈€?
+//   杩欎笁鎷嶇洿鎺ュ喅瀹氣€滀綍鏃跺厑璁稿惎鍔ㄥ啓绐佸彂鈥濓紝鎺掓煡妯甫鏃朵紭鍏堟€€鐤戣繖閲屻€?
 //=============================================================================
 `timescale 1ns/1ps
 module frame_fifo_write
@@ -75,7 +74,8 @@ module frame_fifo_write
 	input[1:0]                       write_addr_index,           // select valid base address from write_addr_0 write_addr_1 write_addr_2 write_addr_3
 	input[ADDR_BITS - 1:0]           write_len,                  // data write module write request data length
 	output reg                       fifo_aclr,                  // to fifo asynchronous clear
-	input[9:0]                      rdusedw                     // from fifo read used words
+	input[9:0]                      rdusedw,                    // from fifo read used words
+	input                           App_wr_sop                  // 琛岄鏍囧織锛堟暟鎹?bit0锛夛紝涓?App_wr_en 鍚屾媿
 );
 localparam ONE                       = 256'd1;                   //256 bit '1'   you can use ONE[n-1:0] for n bit '1'
 localparam ZERO                      = 256'd0;                   //256 bit '0'
@@ -85,6 +85,7 @@ localparam ZERO                      = 256'd0;                   //256 bit '0'
 // stream row 0 -> memory row FRAME_HEIGHT-1, stream row 1 -> memory row FRAME_HEIGHT-2, ...
 localparam [ADDR_BITS - 1:0] VFLIP_FIRST_ADDR_OFFSET = (FRAME_HEIGHT - 1) * FRAME_WIDTH;
 localparam [ADDR_BITS - 1:0] VFLIP_LINE_JUMP         = (FRAME_WIDTH * 2) - 1;
+localparam [ADDR_BITS - 1:0] VFLIP_LINE_STEP         = FRAME_WIDTH;
 localparam [15:0]            VFLIP_LINE_LAST_X       = FRAME_WIDTH - 1;
 
 //write state machine code
@@ -107,6 +108,8 @@ reg[1:0]                            write_addr_index_d0;
 reg[1:0]                            write_addr_index_d1;
 reg[3:0]                            state;                       //state machine
 reg [ADDR_BITS - 1:0]	 App_wr_addr_r;
+reg [ADDR_BITS - 1:0]	 row_start_r;                // 褰撳墠琛岄鍦板潃锛堣棣栨爣蹇楀埌鏉ヨ嚜澧?閫掑噺锛?
+reg                      sop_mode;                   // 鏈抚宸茶鍒拌棣栨爣蹇楋紝鏀圭敤鏄惧紡琛屽榻?
 reg [15:0]                            wr_x;                       // current x position in one input row
 
 reg [BURST_BITS - 1:0]				burst_cnt;
@@ -115,9 +118,9 @@ wire								wr_burst_finish;
 reg App_wr_en_r;
 reg App_wr_en_d0;
 
-// 写突发条件：rdusedw / App_rd_busy 先各打一拍，切断
-// “异步 FIFO 读指针 -> 21bit 比较 -> 读 FSM” 在 125MHz 下的长组合路径
-// （M0 报告中的 -0.698ns 违例即来自此处）。
+// 鍐欑獊鍙戞潯浠讹細rdusedw / App_rd_busy 鍏堝悇鎵撲竴鎷嶏紝鍒囨柇
+// 鈥滃紓姝?FIFO 璇绘寚閽?-> 21bit 姣旇緝 -> 璇?FSM鈥?鍦?125MHz 涓嬬殑闀跨粍鍚堣矾寰?
+// 锛圡0 鎶ュ憡涓殑 -0.698ns 杩濅緥鍗虫潵鑷澶勶級銆?
 reg [9:0] rdusedw_r;
 reg       app_rd_busy_r;
 
@@ -132,9 +135,9 @@ always @(posedge mem_clk or posedge rst) begin
 end
 
 wire into_burst_c;
-assign into_burst_c = (((write_len_latch <= (rdusedw_r + write_cnt)) || rdusedw_r > BURST_SIZE) && ~app_rd_busy_r);//当rd在突发时不会进入burst
+assign into_burst_c = (((write_len_latch <= (rdusedw_r + write_cnt)) || rdusedw_r > BURST_SIZE) && ~app_rd_busy_r);//褰搑d鍦ㄧ獊鍙戞椂涓嶄細杩涘叆burst
 
-// into_burst 扇出到 O_wr_busy -> 读 FSM / rd_arbiter，再打一拍切断 125MHz 长路径
+// into_burst 鎵囧嚭鍒?O_wr_busy -> 璇?FSM / rd_arbiter锛屽啀鎵撲竴鎷嶅垏鏂?125MHz 闀胯矾寰?
 reg into_burst;
 always @(posedge mem_clk or posedge rst) begin
 	if (rst)
@@ -143,11 +146,15 @@ always @(posedge mem_clk or posedge rst) begin
 		into_burst <= into_burst_c;
 end
 
-// into_burst 扇出到 O_wr_busy -> 读 FSM，打一拍切断 125MHz 长路径
+// into_burst 鎵囧嚭鍒?O_wr_busy -> 璇?FSM锛屾墦涓€鎷嶅垏鏂?125MHz 闀胯矾寰?
 
-assign App_wr_addr = {App_wr_addr_r[ADDR_BITS - 1:0]};
+// 琛岄瀛楋紙sop锛夌殑鍦板潃鐩存帴鐢?row_start_r 缁勫悎缁欏嚭锛欶IFO 闃熷ご甯﹁棣栨爣蹇楋紝
+// 杩欐牱鏃犺涓婁竴琛屽疄闄呮敹浜嗗灏戜釜瀛楋紝鏈绗竴涓儚绱犱竴瀹氳惤鍦ㄨ棣栥€?
+wire [ADDR_BITS - 1:0] next_row_start = row_start_r - VFLIP_LINE_STEP;
+
+assign App_wr_addr = (WRITE_V_FLIP && App_wr_sop) ? next_row_start : App_wr_addr_r;
 //assign O_wr_busy = (state != S_IDLE || (S_IDLE && write_req_d2));
-assign O_wr_busy = (state == S_WRITE_BURST || (state == S_CHECK_FIFO && into_burst));//在突发，或者将要突发，则显示busy
+assign O_wr_busy = (state == S_WRITE_BURST || (state == S_CHECK_FIFO && into_burst));//鍦ㄧ獊鍙戯紝鎴栬€呭皢瑕佺獊鍙戯紝鍒欐樉绀篵usy
 assign wr_burst_finish = (burst_cnt >= BURST_SIZE);
 assign write_finish = (state == S_END) ? 1'b1 : 1'b0;            //write finish at state 'S_END'
 assign App_wr_en = App_wr_en_d0;
@@ -178,10 +185,12 @@ begin
 end
 always @(posedge mem_clk or posedge rst)
 begin
-	if(rst == 1'b1)
+		if(rst == 1'b1)
 	begin
 		burst_cnt <= ZERO[BURST_BITS - 1:0];
 		App_wr_addr_r <= ZERO[ADDR_BITS - 1:0];
+		row_start_r   <= ZERO[ADDR_BITS - 1:0];
+		sop_mode      <= 1'b0;
 		App_wr_en_d0 <= 1'b0;
 		wr_x <= 16'd0;
 	end
@@ -197,21 +206,45 @@ begin
 		if(state == S_ACK)
 			begin
 				wr_x <= 16'd0;
+				sop_mode <= 1'b0;
 				if(write_addr_index_d1 == 2'd0)
-					App_wr_addr_r <= WRITE_V_FLIP ? (write_addr_0 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_0;
+					begin
+						App_wr_addr_r <= WRITE_V_FLIP ? (write_addr_0 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_0;
+						row_start_r   <= (WRITE_V_FLIP ? (write_addr_0 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_0) + VFLIP_LINE_STEP;
+					end
 				else if(write_addr_index_d1 == 2'd1)
-					App_wr_addr_r <= WRITE_V_FLIP ? (write_addr_1 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_1;
+					begin
+						App_wr_addr_r <= WRITE_V_FLIP ? (write_addr_1 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_1;
+						row_start_r   <= (WRITE_V_FLIP ? (write_addr_1 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_1) + VFLIP_LINE_STEP;
+					end
 				else if(write_addr_index_d1 == 2'd2)
-					App_wr_addr_r <= WRITE_V_FLIP ? (write_addr_2 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_2;
-				else if(write_addr_index_d1 == 2'd3)
-					App_wr_addr_r <= WRITE_V_FLIP ? (write_addr_3 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_3;
+					begin
+						App_wr_addr_r <= WRITE_V_FLIP ? (write_addr_2 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_2;
+						row_start_r   <= (WRITE_V_FLIP ? (write_addr_2 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_2) + VFLIP_LINE_STEP;
+					end
+				else
+					begin
+						App_wr_addr_r <= WRITE_V_FLIP ? (write_addr_3 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_3;
+						row_start_r   <= (WRITE_V_FLIP ? (write_addr_3 + VFLIP_FIRST_ADDR_OFFSET) : write_addr_3) + VFLIP_LINE_STEP;
+					end
 			end
 		else if(App_wr_en)
 			begin
+				if(App_wr_sop)
+					sop_mode <= 1'b1;
 				if(WRITE_V_FLIP)
 				begin
-					if(wr_x == VFLIP_LINE_LAST_X)
+					if(App_wr_sop)
 					begin
+						// 鏄惧紡琛岄瀵归綈锛氭柊琛岄 = 涓婁竴琛岄 - 640锛屼笌涓婁竴琛屽疄闄呮敹鍒板灏戜釜瀛楁棤鍏炽€?
+						// 杩欐牱鍗充娇鏌愯灏?澶氫竴涓瓧锛岃宸篃涓嶄細閫愯绱Н鎴愭枩鍒囥€?
+						wr_x          <= 16'd0;
+						row_start_r   <= next_row_start;
+						App_wr_addr_r <= next_row_start + 1'b1;
+					end
+					else if(!sop_mode && (wr_x == VFLIP_LINE_LAST_X))
+					begin
+						// 鍏煎娌℃湁琛岄鏍囧織鐨勬棫鏁版嵁娴侊紙鍐呯疆娴嬭瘯鍥炬绛夛級
 						wr_x <= 16'd0;
 						App_wr_addr_r <= App_wr_addr_r - VFLIP_LINE_JUMP;
 					end

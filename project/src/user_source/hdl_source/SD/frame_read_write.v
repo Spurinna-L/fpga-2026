@@ -116,7 +116,7 @@ module frame_read_write
 
 );
 wire[BURST_BITS - 1:0]                           wrusedw;                    // write used words
-wire[BURST_BITS - 1:0]                           rdusedw;                    // read used words
+wire[BURST_BITS - 1:0]                           rdusedw;                    // write used words（IP 为 9 bit）
 
 wire 								 App_rd_busy;
 wire								 App_wr_busy;
@@ -182,7 +182,8 @@ frame_fifo_write_m0
 	.write_addr_index           (write_addr_index         ),    
 	.write_len                  (write_len                ),
 	.fifo_aclr                  (write_fifo_aclr          ),
-	.rdusedw                 	(rdusedw                  )
+	.rdusedw                 	(rdusedw                  ),
+	.App_wr_sop                 (App_wr_din[0]            )
 );
 
 //instantiate an asynchronous FIFO 

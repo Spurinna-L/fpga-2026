@@ -2,8 +2,9 @@
 // top_tf_hdmi_audio.v — 系统顶层：TF 卡 BMP → SDRAM → 640×480@60 HDMI + 音频
 //-----------------------------------------------------------------------------
 // 功能：
-//   上电后自动扫描 TF 卡中的 640×480 / 24bit / 非压缩 BMP，并把前 4 张
-//   **依次预载**到 SDRAM 的 4 个槽位（BUF0..BUF3）；预载完成前不读帧缓存。
+//   上电后自动扫描 TF 卡中的 24bit / 非压缩 BMP（源图 160×120~1920×1080），
+//   经 bmp_scale 保持比例双线性适配到 640×480，再把前 4 张**依次预载**到
+//   SDRAM 的 4 个槽位（BUF0..BUF3）；预载完成前不读帧缓存。
 //   运行期只读：M2 改为**按行读取 A/B 两个槽**（frame_line_read），每行
 //   1280 字写入双 bank 行缓冲，经 mixer 做溶解/水平滑动，再送 HDMI；
 //   K1/自动轮播只改槽号，运行期不写 SDRAM。
@@ -39,7 +40,8 @@
 //   sys_pll / video_pll / PLL_HDMI_AUDIO        三个时钟 PLL
 //   reset_sync ×6                               每域复位同步
 //   keyboard_scan / key_filter                  键盘扫描与消抖
-//   sd_card_bmp                                 SD + FAT32 + BMP + 4 槽预载调度
+//   bmp_read / bmp_scale                        BMP 原始扇区解析 + 双线性适配
+//   sd_card_bmp                                 SD + 4 槽预载调度
 //   video_timing_data / video_pos               视频时序、行计数与像素坐标
 //   line_sched / frame_line_read                提前一行取 A/B
 //   line_buffer ×2 / mixer                      A/B 乒乓行缓冲与溶解/滑动
@@ -246,8 +248,8 @@ module top(
         .key_next          (key_next),  // 下一帧按键
         .key_auto          (key_auto),  // 自动播放按键
         .state_code        (state_code),    // SD 卡状态码
-        .bmp_width         (16'd640),
-        .bmp_height        (16'd480),
+        .bmp_width         (16'd1920),   // 源图最大宽（bmp_scale 适配到 640）
+        .bmp_height         (16'd1080),  // 源图最大高
         .display_valid     (display_valid), // 首图已提交  
         .write_finish_toggle(frame_write_toggle_mem),
         .write_buf_idx     (write_buf_idx), // 当前写入缓冲区索引

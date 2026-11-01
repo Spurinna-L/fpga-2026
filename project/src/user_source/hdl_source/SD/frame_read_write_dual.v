@@ -234,7 +234,8 @@ module frame_read_write_dual
         .write_addr_index(write_addr_index),
         .write_len       (write_len),
         .fifo_aclr       (write_fifo_aclr),
-        .rdusedw         (rdusedw)
+        .rdusedw         (rdusedw),
+        .App_wr_sop      (1'b0)       // 旧版无行首标志
     );
 
     //-------------------------------------------------------------------------

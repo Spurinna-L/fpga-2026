@@ -5,8 +5,8 @@
 //   1) 字库 ROM 抽查（码表 / 行号 / 位序，与生成文件比对）
 //   2) 复位后 pos = 640（文本完全在屏幕外）
 //   3) vs 帧边界每帧左移 1 像素；关闭字幕时位置冻结
-//   4) 字形像素 = 红色 24'hFF0000；字幕带内其余像素 = 纯白 24'hFFFFFF
-//   5) 字幕带外 / de=0 / I_en=0 逐像素直通
+//   4) 字形像素 = 红色 24'hFF0000；字形之外 = 原像素直通（字幕背景透明）
+//   5) de=0 / I_en=0 逐像素直通
 //   6) 循环回绕：pos = POS_MIN+1 → POS_MIN → 640
 //
 // 用法（ModelSim）：
@@ -99,13 +99,13 @@ module tb_scroll_text;
             ref_row  = py - TEXT_Y0;
             #1;   // 等组合字库稳定
 
-            if (!en || !de || !in_band)
+            if (!en || !de)
                 exp = rgb;
             else if (in_row && (dx >= 0) && (dx < TEXT_W) &&
                      ref_bits[15 - col_i])
                 exp = 24'hFF0000;   // 字形：红色
             else
-                exp = 24'hFFFFFF;   // 底条：纯白
+                exp = rgb;          // 字形之外：背景透明，原像素直通
 
             if (o_rgb !== exp) begin
                 errors = errors + 1;

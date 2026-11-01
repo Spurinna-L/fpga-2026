@@ -1,9 +1,9 @@
 # 主工程源码说明（`project/src/`）
 
-> 本目录是 **M0/M1/M2 唯一主线工程**，由 `legacy/hdmi_test_base/` 全量迁入，并按 `video/ audio/ hdmi/ control/` 归档自研模块。
-> 功能：TF 卡 640×480 BMP → SDRAM 4 槽预载（运行期只读）→ 按行取 A/B → 行缓冲/溶解/滑动 → 亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕 → **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
+> 本目录是 **M0–M3 唯一主线工程**，由 `legacy/hdmi_test_base/` 全量迁入，并按 `video/ audio/ hdmi/ control/` 归档自研模块。
+> 功能：TF 卡 BMP（源图 160×120~1920×1080）→ `bmp_scale` 双线性适配 640×480 → SDRAM 4 槽预载（运行期只读）→ 按行取 A/B → 行缓冲/溶解/滑动 → 亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕 → **640×480@60 HDMI 1.4b 音视频输出**（48kHz 测试音）。
 > 官方基线：`lab_ex5_i2s`（APUG092 HDMI 1.4b + SD/）。
-> 模块包含关系图：`../doc/模块层次图.svg`（M1 基线；M2 增量见 `../doc/框架说明.md` §2.2）；每个模块的功能/接口见对应 `.v` 顶部注释。
+> 模块包含关系图：`../doc/模块层次图.svg`（M1 基线；M2/M3 增量见 `../doc/框架说明.md` §2.2）；每个模块的功能/接口见对应 `.v` 顶部注释。
 
 ---
 
@@ -32,17 +32,17 @@ project/src/
 ├── user_source/
 │   ├── hdl_source/
 │   │   ├── top_tf_hdmi_audio.v    # 顶层
-│   │   ├── SD/                    # SD/BMP + frame_read_write + sdr_refresh_sweep + sdram（含未综合的双读实验源码）
+│   │   ├── SD/                    # SD/BMP + bmp_scale + frame_read_write + sdr_refresh_sweep + sdram（含未综合的双读实验源码）
 │   │   ├── include/               # global_def.v + sdr_as_ram / sdr_init_ref / sdr_wrrd 加密核（位置固定）
 │   │   ├── video/                 # 行读取/行缓冲/mixer/video_post/video_proc/OSD/Logo
-│   │   ├── audio/                 # L1 测试音 / I2S_receiver / ACR（M3 增 synth_player/audio_viz）
+│   │   ├── audio/                 # L1 测试音 / I2S_receiver / ACR（M3 余项增 synth_player/audio_viz）
 │   │   ├── hdmi/                  # HDMI 1.4b 加密核（黑盒）+ PHY + 10:1 串行化
 │   │   ├── control/               # keyboard_scan / key_filter / regs / seg_led* / reset_sync
 │   │   └── ip/                    # sys_pll / video_pll / afifo（TD IP）
 │   └── constraints_source/
 │       ├── pin.adc                # 本板引脚
 │       └── timing.sdc             # 时钟约束
-├── sim/                           # iverilog 语法检查 + 全部 M0–M2 testbench（fail-fast）
+├── sim/                           # iverilog 语法检查 + 全部 M0–M3 testbench（22 个，fail-fast）
 └── tools/                         # BMP 生成/检查 + 输出图
 ```
 
@@ -95,7 +95,7 @@ project/src/
 - 4×4 矩阵：`kb_row=D9/F9/C10/E10`，`kb_col=E11/D11/C11/F10`
 - `key_deb[0]`（第 4 行第 1 列）= **下一张**：只切换显示槽（瞬间完成，不加载）
 - `key_deb[1]`（第 4 行第 2 列）= **自动轮播开关**（同样只切换槽）
-- 其余按键：K3 转场模式、K4 OSD/Logo 开关、K5/K6 亮度 ±8、K7/K8 对比度 ±16、K12 参数复位、K13 滚动字幕开关（K9–K11 预留给 M3）
+- 其余按键：K3 转场模式、K4 OSD/Logo 开关、K5/K6 亮度 ±8、K7/K8 对比度 ±16、K12 参数复位、K13 滚动字幕开关（K9–K11 预留给音频/可视化）
 - 数码管（4 位，高位在左）：`[SD状态码][图片序号][转场/OSD][音源/可视化]`
 - LED：
   - `led[0]` 音频 PLL 锁定
@@ -112,10 +112,13 @@ project/src/
 ## 4. 上板步骤
 
 1. 用 [`tools/README.md`](tools/README.md) 的工具链生成 `sd_card.img` 并写到物理卡（`bmp_convert → check_bmp → sd_pack → Win32DiskImager/balenaEtcher`）；
-2. M2 当前 bit 仍要求 **640×480、24bit、非压缩**；镜像内按参数顺序对应槽 0..3；
-3. HDMI 接 **带喇叭/音频输出** 的显示器或电视；
-4. TD 打开 `main_project.al` → 综合 → 布局布线 → 下载；
-5. 上电后：首图显示 + 测试音（do/re/mi…）；`key1` 切下一张，`key2` 开关自动轮播（周期 4s）；右上角参数面板、左上角 Logo、底部滚动字幕默认显示。
+2. **bit 与图片规范要匹配**：`main_project_m3_scale.bit` 接受 **160×120~1920×1080、24bit、非压缩、bottom-up**（行填充自动跳过，保持比例 + 黑边）；`main_project_m2_scroll.bit` 仍只认 **640×480**（打包时加 `--strict-640x480`）；镜像内按参数顺序对应槽 0..3；
+3. 现成的 M3 上板镜像（4 张不同尺寸，已回读校验）：
+   - `project/out/sd_card_m3_a.img`：640×480（旁路）/ 160×120 / 1920×1080 / 540×960
+   - `project/out/sd_card_m3_b.img`：641×481（行填充）/ 1280×720 / 320×240 / 640×480
+4. HDMI 接 **带喇叭/音频输出** 的显示器或电视；
+5. TD 打开 `main_project.al` → 综合 → 布局布线 → 下载；
+6. 上电后：首图显示 + 测试音（do/re/mi…）；`key1` 切下一张，`key2` 开关自动轮播（周期 4s）；右上角参数面板、左上角 Logo、底部滚动字幕默认显示。
 
 ---
 
@@ -125,7 +128,7 @@ project/src/
 |:--|:--|
 | 画面 | 640×480，稳定，无撕裂 |
 | 音频 | 音阶测试音，循环 |
-| 上电 | 约 1.2s 彩条（预载 4 张图），随后显示第 1 张 |
+| 上电 | 彩条期间预载 4 张图（640×480 约 1.2s；含大图约 3~4s），随后显示第 1 张 |
 | 切图 | key1 **瞬间**切换到下一槽（无加载、无彩条） |
 | 轮播 | key2 开启后 4s 切换（只改槽号） |
 | 参数 OSD | 右上角两行：TIME/IMG/BRT/CNT/TR；K4 开关 |
@@ -165,7 +168,7 @@ project/src/
 | 3 | 已找到 BMP，等写握手 | 查 `frame_read_write`/SDRAM 写口 |
 | 4 | 正在写像素 | 写路径卡住/帧未完成 |
 
-> `bmp_read` 匹配条件：**BM 头 + 640×480 + 24bit + compression=0**；top-down BMP 不匹配。
+> `bmp_read` 匹配条件：**BM 头 + 24bit + compression=0 + 正高度 + 宽高 ≤1920×1080**；top-down BMP 不匹配。行填充由 `bmp_read` 跳过，`bmp_scale` 输出固定 640×480。
 
 ### 6.3 SDRAM 自检工具（源码保留，不参与综合）
 
@@ -236,7 +239,7 @@ SDRAM → frame_line_read（每行 640 A + 640 B，计满 1280 个返回）
 
 > 注意：自动轮播间隔已从 1s 改为 4s（`sd_card_bmp.AUTO_PERIOD_S=4`），否则 1s 转场会连续不断。
 
-### 6.7 M2 亮度/对比度 + 参数 OSD + Logo（已实现，待上板复测）
+### 6.7 M2 亮度/对比度 + 参数 OSD + Logo（✅ 已上板）
 
 - `video_proc`：24-bit 三通道 `clamp((c-128)*contrast/128 + 128 + brightness, 0, 255)`，2 级流水；亮度 -64..+64（K5/K6），对比度 64..192（K7/K8，128 = 1.0x）；
 - `video_param_latch`：38-bit 参数总线 2FF + 连续 8 拍稳定检测 + vs 下降沿整组锁存，避免多位中间码；
@@ -253,15 +256,27 @@ SDRAM → frame_line_read（每行 640 A + 640 B，计满 1280 个返回）
 - 源选择提前到 `video_post` 之前：无图彩条也会叠加亮度/OSD/Logo；
 - 该阶段 bit：`project/out/main_project_m2_osd.bit`（无字幕版，Setup +0.346ns / Hold +0.011ns）。
 
-### 6.8 M2 底部中文滚动字幕（已实现，待上板复测）
+### 6.8 M2 底部中文滚动字幕（✅ 已上板）
 
 - `scroll_text_overlay`：底部 `y=444..467` 白底横幅，16×16 红字位于 `y=448..463`；纯组合，0 拍；
 - 文案：`逐逻辑而行，赴创新之约` 共 **11 字**（`gen_cn_font_v.py` 生成，支持 1~16 字）；
 - `font_cn_16x16`：11×16×16 = 2,816 bit，组合 LUT ROM，**0 BRAM**；
 - 滚动：vs 下降沿 `pos-1`（1px/帧 ≈ 59.5px/s），整条 880px 循环约 14.8s；关闭时冻结；
 - 开关：**K13**，与 K4（参数面板/Logo）独立，默认开；
-- 当前完整版 bit：`project/out/main_project_m2_scroll.bit`
+- 当前主 bit：`project/out/main_project_m3_scale.bit`（含缩放，见 §6.9）
   （Setup +0.508ns / Hold +0.003ns；LUT 5,082、REG 4,212、BRAM9K 28、DSP 3）。
+
+### 6.9 M3 图片缩放（✅ 已上板）
+
+- **写通路**：`bmp_read`（真实 W/H、跳行填充、`src_ready` 反压）→ `bmp_scale`（双线性 → 640×480）→ `frame_read_write`；
+  运行期读链路（`frame_line_read`/`mixer`/`video_post`）完全不变；
+- **规格**：源图 160×120~1920×1080、24bit、非压缩、bottom-up；保持比例 + 黑边；640×480 走逐像素旁路；
+- **行缓冲**：2×2048×24，带**行号标签**（只覆盖已被输出消费的行，缩小 ≥2 不死锁）；11 拍/像素；
+- **容错**：`src_eof` 后不足 307200 像素时**补黑到满帧**（板端实测会少 450~510 个）；
+- **诊断**：`top` 的 `localparam DEBUG_SEG`（默认 0）→ 1 时数码管显示 `[state][found][差额]`，LED4/5 = finish/bypass；
+  诊断 bit：`project/out/main_project_m3_pad.bit`；
+- **主 bit**：`project/out/main_project_m3_scale.bit`（Setup +0.110ns / Hold +0.011ns；LUT 7,379、REG 5,268、BRAM9K 43、DSP 11）；
+- **测试镜像**：`project/out/sd_card_m3_a.img` / `sd_card_m3_b.img`（4 张不同尺寸，已回读校验）。
 
 
 ---
@@ -295,15 +310,22 @@ powershell -ExecutionPolicy Bypass -File sim/run_sim.ps1
 | M2 Logo | `sim/tb_logo_overlay.v` | ✅ 13,834 项：透明区直通、像素映射 |
 | M2 滚动字幕 | `sim/tb_scroll_text.v` | ✅ 209 项：字库/位置/滚动/颜色/回绕 |
 | M2 后处理集成 | `sim/tb_video_post.v` | ✅ 20 项：OSD 关断逐像素直通 + 2 拍边带 |
-| TD 综合/布线 | `main_project.al` | ✅ **Setup WNS +0.508ns / Hold WNS +0.003ns，0 失败端点**；LUT 5,082（25.93%）、REG 4,212、BRAM9K 28、DSP 3 |
+| M3 缩放读取/行填充 | `sim/tb_bmp_read.v` | ✅ 5×3 行填充、像素顺序、config/sop/eof |
+| M3 缩放几何/黑边 | `sim/tb_bmp_scale.v` | ✅ 1:1/2×/16:9/竖图/奇数宽 |
+| M3 源不足补黑 | `sim/tb_pad.v` | ✅ 只送 306700 像素仍输出 307200、补齐为黑 |
+| M3 预载联调 | `sim/tb_bmp_pipeline.v` | ✅ 高速送数 + 反压，恰好 307200 像素 |
+| M3 真卡回放 | `sim/tb_sd_bmp.v` | ✅ `sd_card_m3_a.img` 4 帧 × 307200 字 → `display_valid=1` |
+| TD 综合/布线 | `main_project.al` | ✅ **Setup +0.110ns / Hold +0.011ns，0 失败**；LUT 7,379（37.65%）、REG 5,268、BRAM9K 43、DSP 11 |
 
-> 说明：`tb_chain` 跑 9 个完整帧（约 151ms 仿真时间），iverilog 下约 4–5 分钟，属正常现象；其余 testbench 秒级完成。
+> 说明：`tb_chain` 跑 9 个完整帧（约 151ms 仿真时间），iverilog 下约 4–5 分钟；`tb_sd_bmp` 约 4–6 分钟；其余 testbench 秒级完成。
+> `run_sim.ps1 -Full` 额外跑大尺寸遍历 `tb_scale_fast`（约 10 分钟）。
 
 ---
 
 ## 8. 后续演进（M1–M4）
 
 - **M1（已完成并封档，tag `m1-final`；噪点修复 tag `m1-patch`）**：**4 槽预载 + 运行期只读**；顶层只例化 `frame_read_write`（1 写 1 读）；双读源码保留但不参与综合；`video_delay` 双 RGB + `x/y`；`control/regs` 16 键/1Hz/数码管；`sdr_refresh_sweep` 消隐期顺序扫描 4 槽；
-- **M2（行缓冲/转场/亮度/OSD/Logo/字幕已完成；字幕版待复测）**：`frame_line_read` + 2-bank 行缓冲 + `mixer`（溶解/滑动）+ `disp_ctrl` + `video_post`（亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕）；
-- **M3**：L2 多谐波/双音伴奏波表合成 `synth_player` + `audio_viz`（声波曲线 + 8 段频谱）；
-- **M4**：`timing.sdc` 最终复测、QSPI 固化、2h 烤机（复位同步/写 FSM 打拍已在 M1 完成）。
+- **M2（✅ 已上板）**：`frame_line_read` + 2-bank 行缓冲 + `mixer`（溶解/滑动）+ `disp_ctrl` + `video_post`（亮度/对比度 + 参数 OSD + Logo + 11 字滚动字幕）；
+- **M3（图片缩放 ✅ 已上板）**：`bmp_read` 任意尺寸/行填充 + `bmp_scale` 双线性/黑边/旁路 + 补黑容错；
+  **M3 余项（下一步）**：L2 多谐波/双音伴奏波表合成 `synth_player` + `audio_viz`（声波曲线 + 8 段频谱）；
+- **M4**：`timing.sdc` 最终复测（补 `audio_mclk ↔ clk` 异步组）、QSPI 固化、2h 烤机（复位同步/写 FSM 打拍已在 M1 完成）。
