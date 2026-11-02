@@ -20,6 +20,7 @@ cd D:\fpga_2026\project\src\tools
 #    main_project_m2_scroll.bit → 只支持 640×480（必须加 --strict-640x480）
 
 # 1) 图片转 24-bit bottom-up BMP（把 input_images 换成你的素材目录）
+#    （或者 python gen_test_bmp.py 生成 00_bars / 01_gradient / 02_checker / 03_text 四张标准测试图）
 python bmp_convert.py input_images -o output_bmp
 
 # 2) 校验（M3 缩放 bit 用默认范围；M2 bit 加 --strict-640x480）

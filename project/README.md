@@ -10,7 +10,7 @@
 
 > **工程基线声明**：
 > - **唯一主线工程**：`project/src/td_project/main_project.al`；
-> - 历史工程（720p + DVI 实验、R-2R 音频实验、旧 16-bit/720p 骨架）已全部归档至仓库根目录 `legacy/`，**不再参与编译**；
+> - 历史工程（720p + DVI 实验、R-2R 音频实验、旧 16-bit/720p 骨架）已归档至仓库根目录 `legacy/`，**不参与编译、不随本包提供**；
 > - 冻结基线：tag `m1-final`（M1 基础）/ `m1-patch`（闲置槽噪点修复）；
 > - 最终方案真源：[`doc/总体方案_v3.7.md`](doc/总体方案_v3.7.md)。
 
@@ -42,7 +42,7 @@
 
 | 顺序 | 文档 | 内容 |
 |:--:|:--|:--|
-| 1 | [`../项目计划.md`](../项目计划.md) | 项目目标、范围、资源评估、11 月 4 日倒排计划 |
+| 1 | [`doc/项目计划.md`](doc/项目计划.md) | 项目目标、范围、资源评估、倒排计划 |
 | 2 | [`doc/总体方案_v3.7.md`](doc/总体方案_v3.7.md) | **唯一真源**：冻结决策、4 槽预载架构、扩展方案、资源核算 |
 | 3 | [`doc/进度看板.md`](doc/进度看板.md) | **做到哪一步了**：M0–M4 进度、实测资源与增量预算 |
 | 4 | [`doc/音频合成方案.md`](doc/音频合成方案.md) | L1 测试音 + L2 多谐波/复调波表合成 + 声波/频谱可视化 |
@@ -78,7 +78,7 @@ project/
 │   │   └── constraints_source/
 │   │       ├── pin.adc              # 引脚约束
 │   │       └── timing.sdc           # 时序约束
-│   ├── sim/                         # iverilog 语法检查 + M0–M3.3 testbench（27 个，默认跑 26，fail-fast）
+│   ├── sim/                         # iverilog 语法检查 + M0–M3.3 testbench（27 个，默认跑 25，fail-fast）
 │   └── tools/                       # BMP 生成/检查 + output_bmp/
 ├── doc/                             # 设计文档 + SVG 框图
 ├── out/                             # bit 与综合/时序报告
@@ -112,3 +112,17 @@ project/
 4. **换帧与参数更新只在场消隐期（`vs`）生效**：严禁在有效扫描行内切换缓冲或突变 Alpha；
 5. **流水线严格锁步**：24-bit 视频链每一级必须同步延迟 `rgb[23:0] / hs / vs / de / x / y`；
 6. **单 bitstream + QSPI 固化上电自启**：基础要求与全部扩展要求集成于同一镜像。
+
+---
+
+## 6. 封档与打包说明（2026-11-02）
+
+- **包内只保留**：RTL 源码（src/user_source）、TD 工程（src/td_project/main_project.al + l_ip）、
+  约束（pin.adc / 	iming.sdc）、仿真（src/sim/*.v + 两个 .ps1）、文档（doc/）、工具链（src/tools 的 9 个脚本）、
+  交付 bit 与报告（out/）。
+- **已移除的中间产物**（均可再生，详见 out/README.md）：SD 卡镜像（5×64MB）、仿真日志/可执行（360MB）、
+  TD 构建库（43MB）、缩放测试图、排查用一次性脚本（cmp_* / it_shift* / ind_quad* 等）与生成的测试 BMP。
+- **验证素材**：只保留 src/tools/input_images/（原始照片），生成的 output_bmp/ / out640/ 已删除。
+- **TD 构建目录**：src/td_project/main_project_Runs/{syn_1,phy_1} 只保留 settings.cfg + main_project.prj
+  （后者是 DefaultFlow.tcl 真正读的工程文件，新增源文件时必须同步它，见 doc/验证与里程碑.md §4）。
+- **重新跑通**：`sim/run_syntax.ps1` → `sim/run_sim.ps1`（默认 25 项；`tb_sd_bmp` 无镜像时自动跳过）→ TD 全流程 → 下载 `out/main_project_m3_merged.bit`。

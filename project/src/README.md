@@ -42,7 +42,7 @@ project/src/
 │   └── constraints_source/
 │       ├── pin.adc                # 本板引脚
 │       └── timing.sdc             # 时钟约束
-├── sim/                           # iverilog 语法检查 + 全部 M0–M3.3 testbench（27 个，默认跑 26，fail-fast）
+├── sim/                           # iverilog 语法检查 + 全部 M0–M3.3 testbench（27 个，默认跑 25，fail-fast）
 └── tools/                         # BMP 生成/检查 + 输出图
 ```
 
@@ -114,9 +114,9 @@ project/src/
 
 1. 用 [`tools/README.md`](tools/README.md) 的工具链生成 `sd_card.img` 并写到物理卡（`bmp_convert → check_bmp → sd_pack → Win32DiskImager/balenaEtcher`）；
 2. **bit 与图片规范要匹配**：`main_project_m3_scale.bit` 接受 **160×120~1920×1080、24bit、非压缩、bottom-up**（行填充自动跳过，保持比例 + 黑边）；`main_project_m2_scroll.bit` 仍只认 **640×480**（打包时加 `--strict-640x480`）；镜像内按参数顺序对应槽 0..3；
-3. 现成的 M3 上板镜像（4 张不同尺寸，已回读校验）：
-   - `project/out/sd_card_m3_a.img`：640×480（旁路）/ 160×120 / 1920×1080 / 540×960
-   - `project/out/sd_card_m3_b.img`：641×481（行填充）/ 1280×720 / 320×240 / 640×480
+3. M3 上板镜像（4 张不同尺寸，已回读校验；**封档后不随包提供**，可用 `tools/gen_scale_test_bmp.py` + `tools/sd_pack.py` 重新生成）：
+   - `sd_card_m3_a.img`：640×480（旁路）/ 160×120 / 1920×1080 / 540×960
+   - `sd_card_m3_b.img`：641×481（行填充）/ 1280×720 / 320×240 / 640×480
 4. HDMI 接 **带喇叭/音频输出** 的显示器或电视；
 5. TD 打开 `main_project.al` → 综合 → 布局布线 → 下载；
 6. 上电后：首图显示 + 测试音（do/re/mi…）；`key1` 切下一张，`key2` 开关自动轮播（周期 4s）；右上角参数面板、左上角 Logo、底部滚动字幕默认显示。
