@@ -46,7 +46,7 @@ project/out/scale_test_bmp/
 __pycache__/
 *.pyc
 
-# 临时文件和编辑器备份
+# 打包产物`r`n*.zip`r`n`r`n# 临时文件和编辑器备份
 *.tmp
 *.bak
 *.swp
